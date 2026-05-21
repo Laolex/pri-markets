@@ -1,0 +1,11 @@
+node_modules/
+artifacts/
+cache/
+typechain-types/
+.env
+.env.*
+frontend/node_modules/
+frontend/dist/
+frontend/.vercel/
+*.log
+.DS_Store
