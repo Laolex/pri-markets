@@ -8,7 +8,7 @@
 
 Continuous prediction markets are structurally distorted information aggregation systems. Public order flow enables reflexive behavior — visible directional skew creates momentum cascades, copy-trading, and consensus formation loops that corrupt the underlying price discovery function.
 
-**Core contribution**: This paper introduces a batch auction mechanism for prediction markets that enforces directional confidentiality during information formation while preserving verifiable aggregate price discovery. The mechanism, **Confidential Batch Clearing**, eliminates explicit and interpretable pre-trade directional signaling in order flow and aggregate imbalance during the accumulation window, while publishing a single terminal signal — the **clearing price**, a capital-weighted equilibrium pricing signal — at epoch close. Confidentiality applies to allocation state, not participation existence: participant addresses, ETH amounts, and transaction timing remain publicly observable; the directional assignment of each amount does not.
+**Core contribution**: This paper introduces a mechanism for delayed directional observability under sealed capital allocation, implemented as a batch clearing protocol for binary prediction markets. The mechanism, **Confidential Batch Clearing**, suppresses explicit and interpretable directional price signals during information accumulation, publishing a single terminal signal — the **clearing price**, a capital-weighted equilibrium pricing signal — at epoch close. Confidentiality applies to allocation state, not participation existence: participant addresses, ETH amounts, and transaction timing remain publicly observable; the directional assignment of each amount does not.
 
 Participants submit sealed bids during fixed epoch windows. The YES/NO split is never visible during accumulation. At epoch close, only the terminal aggregate state is revealed — the first and only public signal about directional flow. Individual sides remain encrypted permanently, with settlement computed via FHE conditional execution (`FHE.select`) rather than plaintext side comparison.
 
@@ -29,7 +29,7 @@ Continuous public prediction markets violate this requirement structurally. Ever
 - Participants front-run anticipated large bids based on observed wallet activity
 - Consensus forms visually before the resolving event occurs
 
-The market no longer aggregates information. It aggregates *observations of other participants' behavior*. The price becomes a reflexive artifact of the mechanism itself.
+Under this structure, the price becomes a function of observed participant behavior rather than underlying event probabilities — a reflexive artifact of the mechanism's information topology.
 
 ### 1.2 The Signaling Problem
 
@@ -366,6 +366,16 @@ We consider five adversary classes and their capabilities against this protocol:
 
 ---
 
+**Mechanism Guarantee**
+
+> Within a single epoch, the protocol guarantees that no participant or observer can derive the directional pool composition prior to aggregate reveal, assuming fhEVM ciphertext security and uncompromised KMS operation.
+>
+> The protocol does not guarantee anonymity of participation, timing, or post-settlement payout observability.
+
+---
+
+---
+
 ## 4. Architecture
 
 ### 4.1 Contract Structure
@@ -528,7 +538,7 @@ In the mock coprocessor environment (Hardhat node), pool reveal callbacks comple
 
 Budish, Cramton, and Shim (2015) demonstrate that continuous limit-order books are structurally prone to latency arbitrage and recommend discrete-time batch auctions as a remedy. The key insight: in a continuous market, speed is a substitute for information, which distorts price discovery. In a batch auction, all orders within a window execute at the same price regardless of submission time, eliminating the advantage of speed.
 
-Confidential Batch Clearing extends this reasoning to prediction markets with an additional dimension: **directional confidentiality within the batch window**. The batch structure eliminates timing advantage; the FHE encryption eliminates observational advantage. The two properties are complementary and address distinct attack surfaces.
+Confidential Batch Clearing applies the same batch structure to prediction markets with one additional property: directional confidentiality within the accumulation window. The batch structure removes timing advantage; the FHE accumulator removes observational advantage. The two properties are independent and address distinct channels of information leakage.
 
 The stronger claim: in a standard batch auction, participants can still observe the growing order book and form expectations about the clearing price before the window closes. Confidential Batch Clearing removes this residual observational channel — during accumulation, $P_t^{\text{dir}} = \emptyset$. The batch structure eliminates front-running; the FHE layer eliminates momentum formation.
 
@@ -536,7 +546,7 @@ The stronger claim: in a standard batch auction, participants can still observe 
 
 Institutional dark pools solve the signaling problem in equity markets by routing large orders away from the public lit market. The mechanism is opacity through venue selection, not cryptographic enforcement.
 
-Confidential Batch Clearing achieves opacity through cryptographic enforcement at the protocol layer. The confidentiality property holds for all participants regardless of order size, does not require trust in a venue operator, and is verifiable on-chain.
+Confidential Batch Clearing enforces this property at the protocol layer through ciphertext accumulation. The guarantee is independent of order size, requires no trusted venue operator, and is fully on-chain verifiable.
 
 ### 6.3 Relation to CoW Protocol / MEV Mitigation
 
@@ -604,7 +614,7 @@ The protocol establishes a precise confidentiality boundary: directional flow is
 
 The Selective Cryptographic Enforcement Principle — apply FHE at exactly the information boundary that is causally responsible for the mechanism failure — reduces the FHE overhead to the minimum necessary for the mechanism guarantee: ~389k gas per bid, 3–4× overhead vs plaintext, with a fully measured lifecycle.
 
-This is not a claim that all prediction market problems are solved. It is a specific, bounded, implementable mechanism that eliminates the explicit and interpretable pre-trade directional signaling in order flow and aggregate imbalance that is the primary failure mode of continuous public markets. The protocol is deployed, tested, and measured. The confidentiality model is formal. The adversarial surface is characterized. The gas costs are known.
+The mechanism addresses a single, specific structural property: intra-epoch directional observability. It does not address calibration, irrational flow, oracle trust, or liquidity formation. Within that bounded scope, the protocol is deployed, tested with 18 passing cases, and measured against live network conditions. The adversarial surface is characterized. The formal claim and its limits are stated.
 
 ---
 
