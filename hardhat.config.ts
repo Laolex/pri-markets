@@ -8,7 +8,7 @@ const ETHERSCAN_API_KEY = vars.get("ETHERSCAN_API_KEY", "");
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.8.24",
+    version: "0.8.28",
     settings: {
       optimizer: { enabled: true, runs: 800 },
       evmVersion: "cancun",

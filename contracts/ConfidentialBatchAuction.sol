@@ -218,7 +218,8 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
         require(block.timestamp >= m.epochEnd, "Epoch not closed");
         require(!m.resolved, "Already resolved");
 
-        (, int256 price,,,) = AggregatorV3Interface(m.priceFeed).latestRoundData();
+        (, int256 price,, uint256 updatedAt,) = AggregatorV3Interface(m.priceFeed).latestRoundData();
+        require(block.timestamp - updatedAt <= 3600, "Stale oracle");
         uint8 outcome = price >= m.strikePrice ? SIDE_YES : SIDE_NO;
 
         m.resolved = true;

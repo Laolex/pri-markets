@@ -36,6 +36,8 @@ async function main() {
   console.log(`  MARKET_CONTRACT_ADDRESS = "${addr}"`);
 
   if (network.name !== "hardhat" && network.name !== "localhost") {
+    // Note: hardhat-verify <=2.1.3 is broken against the Etherscan v2 API.
+    // If this fails, upload std_input.json manually at https://sepolia.etherscan.io/verifyContract
     console.log("\nWaiting 30s for Etherscan indexing...");
     await new Promise((r) => setTimeout(r, 30_000));
     try {
@@ -44,7 +46,7 @@ async function main() {
     } catch (err: any) {
       const msg = String(err?.message ?? err);
       if (/already verified/i.test(msg)) console.log("Already verified");
-      else console.warn("Verify failed (non-fatal):", msg);
+      else console.warn("Verify failed — use manual std_input.json upload:", msg);
     }
   }
 }
