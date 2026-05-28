@@ -7,7 +7,7 @@ import { loadState, saveState } from "./state.js";
 
 const POLL_MS     = 30_000;  // 30 s between sweeps
 const BLOCK_RANGE = 500;     // max blocks per query
-const DEPLOY_BLOCK = 10_926_652; // contract deployment block — oracle backfill start
+const DEPLOY_BLOCK = 10_940_944; // contract deployment block — oracle backfill start
 
 function requireEnv(key: string): string {
   const v = process.env[key];
