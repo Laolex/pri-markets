@@ -37,10 +37,18 @@ export interface PositionView {
   isToken: boolean;
 }
 
-// cUSDC on Sepolia
-export const CUSDC_TOKEN  = "0xfDBFC62F97A7988515a2684fA427d449fA7a6BAe";
-export const USDC_TOKEN   = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
-export const USDC_DECIMALS = 6;
+// Official Zama cUSDC (Mock) on Sepolia — github.com/zama-ai/protocol-apps
+export const CUSDC_TOKEN      = "0x7c5BF43B851c1dff1a4feE8dB225b87f2C223639";
+// Underlying mock USDC wrapped by official Zama cUSDC
+export const USDC_TOKEN       = "0x9b5Cd13b8eFbB58Dc25A05CF411D8056058aDFfF";
+export const USDC_DECIMALS    = 6;
+
+// Zama Wrappers Registry — browse available confidential tokens
+export const WRAPPERS_REGISTRY = "0x2f0750Bbb0A246059d80e94c454586a7F27a128e";
+
+// Other Zama confidential tokens on Sepolia
+export const CUSDT_TOKEN = "0x4E7B06D78965594eB5EF5414c357ca21E1554491";
+export const CWETH_TOKEN = "0x46208622DA27d91db4f0393733C8BA082ed83158";
 
 export const SIDE_NO  = 0;
 export const SIDE_YES = 1;

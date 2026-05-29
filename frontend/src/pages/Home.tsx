@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useState } from "react";
 import { useMarkets, useMarketCount } from "@/hooks/useMarkets";
 import { MarketCard } from "@/components/market/MarketCard";
 import { ClearingPriceHistory } from "@/components/market/ClearingPriceHistory";
@@ -6,6 +7,61 @@ import { Spinner } from "@/components/ui/Spinner";
 import { PrivacyBoundary } from "@/components/ui/PrivacyBoundary";
 import { useAccount } from "wagmi";
 import { Link } from "react-router-dom";
+import { formatEther } from "viem";
+import type { MarketView } from "@/types";
+
+type FilterTab = "all" | "live" | "token" | "revealed";
+
+function DashboardStats({ markets }: { markets: MarketView[] }) {
+  const liveCount     = markets.filter(m => m.epochStatus === "accumulating").length;
+  const revealedCount = markets.filter(m => m.poolRevealed).length;
+  const tokenCount    = markets.filter(m => m.isTokenMarket).length;
+  const totalVol      = markets.reduce((s, m) => s + m.totalEth, 0n);
+
+  const stats = [
+    { label: "TOTAL EPOCHS",    value: markets.length.toString(),                           accent: false },
+    { label: "LIVE",            value: liveCount.toString(),                                accent: liveCount > 0 },
+    { label: "REVEALED",        value: revealedCount.toString(),                            accent: false },
+    { label: "cUSDC MARKETS",   value: tokenCount.toString(),                               accent: tokenCount > 0 },
+    { label: "TOTAL VOLUME",    value: `${Number(formatEther(totalVol)).toFixed(3)} ETH`,   accent: false },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="grid grid-cols-2 sm:grid-cols-5 gap-px bg-wire mb-8"
+    >
+      {stats.map(({ label, value, accent }) => (
+        <div key={label} className="bg-surface px-4 py-3 text-center">
+          <div className="data-label mb-1">{label}</div>
+          <div className={`font-display text-[20px] leading-none ${
+            accent ? "text-gold" : "text-ink-primary"
+          }`}>
+            {value}
+          </div>
+        </div>
+      ))}
+    </motion.div>
+  );
+}
+
+const FILTER_LABELS: Record<FilterTab, string> = {
+  all:      "ALL",
+  live:     "LIVE",
+  token:    "cUSDC",
+  revealed: "REVEALED",
+};
+
+function filterMarkets(markets: MarketView[], tab: FilterTab): MarketView[] {
+  switch (tab) {
+    case "live":     return markets.filter(m => m.epochStatus === "accumulating");
+    case "token":    return markets.filter(m => m.isTokenMarket);
+    case "revealed": return markets.filter(m => m.poolRevealed);
+    default:         return markets;
+  }
+}
 
 // ── Hero section ──────────────────────────────────────────────────────────
 
@@ -139,11 +195,14 @@ function EmptyState() {
 
 export function Home() {
   const { isConnected } = useAccount();
-  const { data: count }            = useMarketCount();
+  const { data: count }              = useMarketCount();
   const { data: markets, isLoading } = useMarkets();
+  const [activeTab, setActiveTab]    = useState<FilterTab>("all");
   const n = count ? Number(count) : 0;
 
-  const liveCount = markets?.filter(m => m.epochStatus === "accumulating").length ?? 0;
+  const liveCount    = markets?.filter(m => m.epochStatus === "accumulating").length ?? 0;
+  const filtered     = markets ? filterMarkets(markets, activeTab) : [];
+  const showEmpty    = !isLoading && filtered.length === 0 && markets && markets.length > 0;
 
   return (
     <div>
@@ -202,23 +261,45 @@ export function Home() {
         <PrivacyBoundary />
       </motion.section>
 
+      {/* Dashboard stats — when markets exist */}
+      {markets && markets.length > 0 && (
+        <DashboardStats markets={markets} />
+      )}
+
       {/* Epoch listing */}
       <section>
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-baseline gap-3">
+        {/* Header + filter tabs */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+          <div className="flex items-center gap-4">
             <span className="font-display text-2xl tracking-widest text-ink-primary">EPOCHS</span>
             {n > 0 && (
               <span className="font-mono text-[11px] text-ink-dim">
-                {n} TOTAL
-                {liveCount > 0 && (
+                {activeTab === "all" ? `${n} TOTAL` : `${filtered.length} / ${n}`}
+                {liveCount > 0 && activeTab === "all" && (
                   <span className="text-gold ml-2">· {liveCount} LIVE</span>
                 )}
               </span>
             )}
           </div>
-          <Link to="/create" className="btn-ghost text-[10px] px-4 py-1.5">
-            + NEW EPOCH
-          </Link>
+          <div className="flex items-center gap-1">
+            {/* Filter tabs */}
+            {(Object.keys(FILTER_LABELS) as FilterTab[]).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`font-mono text-[9px] tracking-widest px-3 py-1.5 border transition-all ${
+                  activeTab === tab
+                    ? "border-gold-border bg-gold-faint text-gold"
+                    : "border-wire text-ink-dim hover:text-ink-secondary hover:border-ink-dim"
+                }`}
+              >
+                {FILTER_LABELS[tab]}
+              </button>
+            ))}
+            <Link to="/create" className="btn-ghost text-[9px] px-3 py-1.5 ml-2">
+              + NEW
+            </Link>
+          </div>
         </div>
 
         {isLoading ? (
@@ -230,9 +311,23 @@ export function Home() {
           </div>
         ) : !markets || markets.length === 0 ? (
           <EmptyState />
+        ) : showEmpty ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-surface border border-wire py-12 text-center"
+          >
+            <div className="font-display text-3xl text-wire mb-2">NO {FILTER_LABELS[activeTab]} EPOCHS</div>
+            <button
+              onClick={() => setActiveTab("all")}
+              className="font-mono text-[10px] text-gold hover:text-gold-bright mt-2 tracking-wider"
+            >
+              SHOW ALL
+            </button>
+          </motion.div>
         ) : (
           <div className="space-y-2.5">
-            {[...markets].reverse().map((m, i) => (
+            {[...filtered].reverse().map((m, i) => (
               <MarketCard key={m.id} market={m} index={i} />
             ))}
           </div>

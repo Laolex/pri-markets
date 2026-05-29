@@ -26,6 +26,8 @@ function shortAddr(addr: string) {
   return addr.slice(0, 6) + "…" + addr.slice(-4);
 }
 
+// ── Oracle resolve panel ──────────────────────────────────────────────────────
+
 function OracleResolvePanel({ market, onSuccess }: { market: MarketView; onSuccess: () => void }) {
   const { writeContractAsync } = useWriteContract();
   const { setTxStatus } = useAppStore();
@@ -63,16 +65,7 @@ function OracleResolvePanel({ market, onSuccess }: { market: MarketView; onSucce
 
   return (
     <div className="space-y-3">
-      <div>
-        <div className="data-label mb-1">PERMISSIONLESS ORACLE RESOLUTION</div>
-        <p className="font-body text-[13px] text-ink-secondary">
-          Anyone can resolve. Reads {feed?.label ?? "price feed"} and resolves YES if price ≥{" "}
-          <span className="font-mono text-ink-primary">
-            {fromFeedUnits(market.strikePrice, feed?.decimals ?? 8)} {feed?.unit ?? "USD"}
-          </span>.
-        </p>
-      </div>
-      <div className="px-4 py-3 bg-teal-faint border border-teal/30 font-mono text-[10px] text-teal space-y-1">
+      <div className="px-4 py-3 bg-teal-faint border border-teal/25 font-mono text-[10px] text-teal space-y-1">
         <div>FEED: {feed?.label ?? market.priceFeed}</div>
         <div>STRIKE: {fromFeedUnits(market.strikePrice, feed?.decimals ?? 8)} {feed?.unit}</div>
         <div>CONDITION: PRICE ≥ STRIKE → YES · PRICE &lt; STRIKE → NO</div>
@@ -80,25 +73,20 @@ function OracleResolvePanel({ market, onSuccess }: { market: MarketView; onSucce
       <button
         onClick={resolve}
         disabled={isPending}
-        className="btn-gold flex items-center gap-3"
+        className="btn-gold w-full flex items-center justify-center gap-3"
       >
-        {isPending ? (
-          <>
-            <Spinner size={14} />
-            <span>READING ORACLE</span>
-          </>
-        ) : (
-          "RESOLVE VIA ORACLE"
-        )}
+        {isPending ? <><Spinner size={14} /><span>READING ORACLE</span></> : "RESOLVE VIA ORACLE"}
       </button>
       {error && <p className="font-mono text-[11px] text-crimson">{error}</p>}
     </div>
   );
 }
 
-function ResolvePanel({
-  market, isCreator, onSuccess,
-}: { market: MarketView; isCreator: boolean; onSuccess: () => void }) {
+// ── Manual resolve panel ───────────────────────────────────────────────────────
+
+function ResolvePanel({ market, isCreator, onSuccess }: {
+  market: MarketView; isCreator: boolean; onSuccess: () => void;
+}) {
   const { writeContractAsync } = useWriteContract();
   const { setTxStatus } = useAppStore();
   const [isPending, setIsPending] = useState(false);
@@ -124,33 +112,162 @@ function ResolvePanel({
 
   return (
     <div className="space-y-3">
-      <div>
-        <div className="data-label mb-1">RESOLVE OUTCOME</div>
-        <p className="font-body text-[13px] text-ink-secondary">
-          Commit the result on-chain. This initiates the settlement sequence.
-        </p>
-      </div>
+      <div className="data-label">COMMIT OUTCOME</div>
       <div className="grid grid-cols-2 gap-2">
         <button
-          onClick={() => resolve(SIDE_YES)}
-          disabled={isPending}
+          onClick={() => resolve(SIDE_YES)} disabled={isPending}
           className="py-3 font-mono text-[12px] tracking-widest text-void bg-teal disabled:opacity-30 flex items-center justify-center gap-2 transition-all hover:brightness-110"
         >
-          {isPending && <Spinner size={12} />}
-          YES WINS
+          {isPending && <Spinner size={12} color="white" />} YES WINS
         </button>
         <button
-          onClick={() => resolve(SIDE_NO)}
-          disabled={isPending}
+          onClick={() => resolve(SIDE_NO)} disabled={isPending}
           className="py-3 font-mono text-[12px] tracking-widest text-white bg-crimson disabled:opacity-30 flex items-center justify-center gap-2 transition-all hover:brightness-110"
         >
-          {isPending && <Spinner size={12} />}
-          NO WINS
+          {isPending && <Spinner size={12} color="white" />} NO WINS
         </button>
       </div>
     </div>
   );
 }
+
+// ── Right-hand action panel (sticky) ─────────────────────────────────────────
+
+function ActionPanel({
+  market, position, isCreator, onSuccess,
+}: {
+  market: MarketView;
+  position: ReturnType<typeof usePosition>["data"];
+  isCreator: boolean;
+  onSuccess: () => void;
+}) {
+  const hasPos = !!position;
+  const isLive = market.epochStatus === "accumulating";
+
+  const cardBorder = isLive
+    ? "border-gold/25 shadow-card-live"
+    : market.poolRevealed
+    ? "border-teal/25 shadow-card-revealed"
+    : "border-wire";
+
+  return (
+    <div className={`bg-surface border ${cardBorder} overflow-hidden`}>
+      {/* Panel header */}
+      <div className={`h-px w-full ${
+        isLive ? "bg-gradient-to-r from-transparent via-gold/40 to-transparent" :
+        market.poolRevealed ? "bg-gradient-to-r from-transparent via-teal/40 to-transparent" :
+        "bg-wire"
+      }`} />
+      <div className="px-5 py-3 border-b border-wire flex items-center justify-between">
+        <span className="section-header">
+          {isLive && !hasPos ? "PLACE BID" :
+           isLive && hasPos  ? "POSITION" :
+           market.poolRevealed ? "SETTLEMENT" :
+           "ACTIONS"}
+        </span>
+        <MarketStatusBadge status={market.epochStatus} />
+      </div>
+
+      <div className="p-5 space-y-5">
+
+        {/* Accumulating — no position */}
+        {isLive && !hasPos && (
+          <BetPanel
+            marketId={market.id}
+            isTokenMarket={market.isTokenMarket}
+            onSuccess={onSuccess}
+          />
+        )}
+
+        {/* Accumulating — position held */}
+        {isLive && hasPos && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-4 border border-gold-border bg-gold-faint">
+              <div className="relative flex-shrink-0 mt-0.5">
+                <span className="absolute w-3 h-3 rounded-full bg-gold/30 animate-ring-expand" />
+                <span className="relative w-3 h-3 rounded-full bg-gold block" />
+              </div>
+              <div className="min-w-0">
+                <div className="font-mono text-[10px] text-gold tracking-wider mb-1">BID SEALED</div>
+                <div className="font-mono text-[13px] text-ink-primary">
+                  {position?.isToken
+                    ? "cUSDC committed · direction encrypted"
+                    : `${fmtEth(position!.amount)} ETH committed · direction encrypted`
+                  }
+                </div>
+                <div className="font-mono text-[10px] text-ink-dim mt-1.5">
+                  Side: never observable · Pool: sealed until epoch close
+                </div>
+              </div>
+            </div>
+
+            {/* Mechanisnm note */}
+            <div className="text-center py-3">
+              <div className="font-mono text-[9px] text-ink-dim tracking-widest">
+                P_t^dir = ∅ for all t &lt; t_close
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Closed — waiting for creator */}
+        {market.epochStatus === "closed" && !isCreator && !market.resolved && (
+          <p className="font-body text-[13px] text-ink-secondary py-2">
+            Epoch closed. Waiting for outcome to be committed on-chain.
+          </p>
+        )}
+
+        {/* Oracle resolve */}
+        <OracleResolvePanel market={market} onSuccess={onSuccess} />
+
+        {/* Manual resolve */}
+        <ResolvePanel market={market} isCreator={isCreator} onSuccess={onSuccess} />
+
+        {/* Pool reveal */}
+        <RevealPanel market={market} isCreator={false} onSuccess={onSuccess} />
+
+        {/* Claim */}
+        {hasPos && (
+          <ClaimPanel
+            marketId={market.id}
+            position={position!}
+            poolRevealed={market.poolRevealed}
+            onSuccess={onSuccess}
+          />
+        )}
+
+        {!hasPos && market.epochStatus !== "accumulating" && market.epochStatus !== "closed" && (
+          <p className="font-body text-[13px] text-ink-dim py-2">
+            No position held in this epoch.
+          </p>
+        )}
+      </div>
+
+      {/* Resolved outcome */}
+      {market.resolved && market.outcome !== UNRESOLVED && (
+        <div className={`px-5 py-4 border-t flex items-center justify-between ${
+          market.outcome === SIDE_YES
+            ? "border-teal/30 bg-teal-faint"
+            : "border-crimson/30 bg-crimson/5"
+        }`}>
+          <span className="font-mono text-[10px] text-ink-dim tracking-wider">RESOLVED</span>
+          <span className={`font-display text-3xl tracking-widest ${
+            market.outcome === SIDE_YES ? "text-teal" : "text-crimson"
+          }`}
+            style={{
+              textShadow: market.outcome === SIDE_YES
+                ? "0 0 16px rgba(46,196,182,0.5)"
+                : "0 0 16px rgba(196,64,64,0.5)"
+            }}>
+            {market.outcome === SIDE_YES ? "YES" : "NO"}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export function MarketDetail() {
   const { id } = useParams<{ id: string }>();
@@ -171,9 +288,7 @@ export function MarketDetail() {
     return (
       <div className="flex items-center justify-center py-32 gap-3">
         <Spinner size={20} />
-        <span className="font-mono text-[11px] text-ink-secondary tracking-wider">
-          LOADING EPOCH
-        </span>
+        <span className="font-mono text-[11px] text-ink-secondary tracking-wider">LOADING EPOCH</span>
       </div>
     );
   }
@@ -215,195 +330,147 @@ export function MarketDetail() {
   market.epochStatus = computeEpochStatus(market);
 
   const isCreator = address?.toLowerCase() === market.creator.toLowerCase();
-  const hasPos = !!position;
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="max-w-2xl space-y-5"
-    >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       {/* Back */}
       <Link
         to="/"
-        className="inline-flex items-center gap-2 font-mono text-[10px] tracking-widest text-ink-dim hover:text-gold transition-colors group"
+        className="inline-flex items-center gap-2 font-mono text-[10px] tracking-widest text-ink-dim hover:text-gold transition-colors group mb-5"
       >
         <span className="transition-transform group-hover:-translate-x-0.5">←</span>
         ALL EPOCHS
       </Link>
 
-      {/* Header card */}
-      <div className={`bg-surface border notched-lg overflow-hidden relative ${
-        market.epochStatus === "accumulating"
-          ? "border-gold/20 shadow-inset-gold"
-          : market.poolRevealed
-          ? "border-teal/20 shadow-inset-teal"
-          : "border-wire"
-      }`}>
-        {/* Status accent line */}
-        <div className={`h-px w-full ${
-          market.epochStatus === "accumulating"
-            ? "bg-gradient-to-r from-transparent via-gold/40 to-transparent"
-            : market.poolRevealed
-            ? "bg-gradient-to-r from-transparent via-teal/40 to-transparent"
-            : "bg-wire"
-        }`} />
+      {/* Two-column layout */}
+      <div className="flex flex-col lg:flex-row gap-5 items-start">
 
-        <div className="flex items-center justify-between px-5 py-3 border-b border-wire">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="font-mono text-[10px] text-ink-dim">
-              CBC-{String(market.id + 1).padStart(3, "0")}
-            </span>
-            <span className="text-wire">·</span>
-            <span className="addr-display">{shortAddr(market.creator)}</span>
-            {isCreator && (
-              <span className="font-mono text-[9px] tracking-widest bg-gold-faint border border-gold-border text-gold px-2 py-0.5">
-                CREATOR
-              </span>
-            )}
-            {market.useOracle && (
-              <span className="font-mono text-[9px] tracking-widest bg-teal-faint border border-teal/40 text-teal px-2 py-0.5">
-                ⬡ ORACLE
-              </span>
-            )}
-            {market.isTokenMarket && (
-              <span className="font-mono text-[9px] tracking-widest bg-gold-faint border border-gold-border text-gold px-2 py-0.5">
-                cUSDC
-              </span>
-            )}
-          </div>
-          <MarketStatusBadge status={market.epochStatus} />
-        </div>
-        <div className="px-5 py-6">
-          <h1 className="font-body text-[22px] text-ink-primary leading-snug">
-            {market.question}
-          </h1>
-          {market.participantCount > 0n && (
-            <div className="font-mono text-[10px] text-ink-dim mt-2 tracking-wider">
-              {market.participantCount.toString()} PARTICIPANT{market.participantCount !== 1n ? "S" : ""}
-            </div>
-          )}
-        </div>
-      </div>
+        {/* ── Left column — market info ──────────────────────────────────── */}
+        <div className="flex-1 min-w-0 space-y-5">
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-3 gap-px bg-wire">
-        <div className="bg-surface px-4 py-4">
-          <div className="data-label mb-2">
-            {market.epochStatus === "accumulating" ? "CLOSES IN" : "CLOSED"}
-          </div>
-          {market.epochStatus === "accumulating" ? (
-            <MarketCountdown epochEnd={market.epochEnd} />
-          ) : (
-            <div className="font-mono text-[13px] text-ink-dim uppercase">
-              {new Date(market.epochEnd * 1000).toLocaleTimeString()}
-            </div>
-          )}
-        </div>
-        <div className="bg-surface px-4 py-4">
-          <div className="data-label mb-2">VOLUME</div>
-          <div className="font-mono text-[20px] font-bold text-ink-primary leading-none">
-            {fmtEth(market.totalEth)}
-          </div>
-          <div className="font-mono text-[10px] text-ink-dim mt-1">ETH</div>
-        </div>
-        <div className="bg-surface px-4 py-4">
-          <div className="data-label mb-2">CLEARING PRICE</div>
-          <div className={`font-mono text-[20px] font-bold leading-none ${
-            market.poolRevealed ? "text-teal" : "text-wire"
+          {/* Header card */}
+          <div className={`bg-surface border notched-lg overflow-hidden relative ${
+            market.epochStatus === "accumulating" ? "border-gold/20" :
+            market.poolRevealed ? "border-teal/20" : "border-wire"
           }`}>
-            {market.poolRevealed
-              ? `${(Number(market.clearingPrice) / 100).toFixed(2)}%`
-              : "████"}
-          </div>
-          {!market.poolRevealed && (
-            <div className="font-mono text-[9px] text-gold-dim mt-1 tracking-wider">SEALED</div>
-          )}
-        </div>
-      </div>
-
-      {/* Live oracle price ticker — visible for all oracle markets */}
-      <OraclePriceTicker market={market} />
-
-      {/* Settlement */}
-      {market.poolRevealed && (
-        <div className="bg-surface border border-wire p-5">
-          <div className="section-header mb-4">AGGREGATE REVEAL</div>
-          <SettlementPanel market={market} />
-        </div>
-      )}
-
-      {/* Protocol state */}
-      <div className="bg-surface border border-wire overflow-hidden">
-        <div className="px-5 py-3 border-b border-wire">
-          <span className="section-header">PROTOCOL STATE</span>
-        </div>
-        <div className="py-2">
-          <EpochLifecycle status={market.epochStatus} />
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="bg-surface border border-wire p-5 space-y-5">
-        <div className="section-header">ACTIONS</div>
-
-        {market.epochStatus === "accumulating" && !hasPos && (
-          <BetPanel marketId={market.id} isTokenMarket={market.isTokenMarket} onSuccess={invalidate} />
-        )}
-
-        {market.epochStatus === "accumulating" && hasPos && (
-          <div className="flex items-center gap-3 p-3 border border-gold-border bg-gold-faint">
-            <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse-gold" />
-            <div>
-              <div className="font-mono text-[10px] text-gold tracking-wider">BID SEALED</div>
-              <div className="font-mono text-[12px] text-ink-secondary mt-0.5">
-                {fmtEth(position!.amount)} ETH committed · direction encrypted
+            <div className={`h-px w-full ${
+              market.epochStatus === "accumulating"
+                ? "bg-gradient-to-r from-transparent via-gold/40 to-transparent"
+                : market.poolRevealed
+                ? "bg-gradient-to-r from-transparent via-teal/40 to-transparent"
+                : "bg-wire"
+            }`} />
+            <div className="flex items-center justify-between px-5 py-3 border-b border-wire">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="font-mono text-[10px] text-ink-dim">
+                  CBC-{String(market.id + 1).padStart(3, "0")}
+                </span>
+                <span className="text-wire">·</span>
+                <span className="addr-display">{shortAddr(market.creator)}</span>
+                {isCreator && (
+                  <span className="font-mono text-[9px] tracking-widest bg-gold-faint border border-gold-border text-gold px-2 py-0.5">
+                    CREATOR
+                  </span>
+                )}
+                {market.useOracle && (
+                  <span className="font-mono text-[9px] tracking-widest bg-teal-faint border border-teal/40 text-teal px-2 py-0.5">
+                    ⬡ ORACLE
+                  </span>
+                )}
+                {market.isTokenMarket && (
+                  <span className="font-mono text-[9px] tracking-widest bg-gold-faint border border-gold-border text-gold px-2 py-0.5">
+                    cUSDC
+                  </span>
+                )}
               </div>
             </div>
+            <div className="px-5 py-6">
+              <h1 className="font-body text-[22px] text-ink-primary leading-snug">
+                {market.question}
+              </h1>
+              {market.participantCount > 0n && (
+                <div className="font-mono text-[10px] text-ink-dim mt-2 tracking-wider">
+                  {market.participantCount.toString()} PARTICIPANT{market.participantCount !== 1n ? "S" : ""}
+                </div>
+              )}
+            </div>
           </div>
-        )}
 
-        {market.epochStatus === "closed" && !isCreator && (
-          <p className="font-body text-[13px] text-ink-secondary">
-            Waiting for creator to commit outcome on-chain.
-          </p>
-        )}
+          {/* Stats grid */}
+          <div className="grid grid-cols-3 gap-px bg-wire">
+            <div className="bg-surface px-4 py-4">
+              <div className="data-label mb-2">
+                {market.epochStatus === "accumulating" ? "CLOSES IN" : "CLOSED"}
+              </div>
+              {market.epochStatus === "accumulating" ? (
+                <MarketCountdown epochEnd={market.epochEnd} />
+              ) : (
+                <div className="font-mono text-[13px] text-ink-dim uppercase">
+                  {new Date(market.epochEnd * 1000).toLocaleString()}
+                </div>
+              )}
+            </div>
+            <div className="bg-surface px-4 py-4">
+              <div className="data-label mb-2">VOLUME</div>
+              <div className="flex items-baseline gap-1">
+                <span className="font-display text-[24px] leading-none text-ink-primary">
+                  {fmtEth(market.totalEth)}
+                </span>
+                <span className="font-mono text-[10px] text-ink-dim">ETH</span>
+              </div>
+            </div>
+            <div className="bg-surface px-4 py-4">
+              <div className="data-label mb-2">CLEARING PRICE</div>
+              {market.poolRevealed ? (
+                <div
+                  className="font-display text-[24px] leading-none text-teal"
+                  style={{ textShadow: "0 0 16px rgba(46,196,182,0.4)" }}
+                >
+                  {(Number(market.clearingPrice) / 100).toFixed(2)}%
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-[18px] text-wire tracking-widest">████</span>
+                  {market.epochStatus === "accumulating" && (
+                    <span className="font-mono text-[8px] text-gold/50 tracking-wider">SEALED</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
 
-        <OracleResolvePanel market={market} onSuccess={invalidate} />
-        <ResolvePanel market={market} isCreator={isCreator} onSuccess={invalidate} />
-        <RevealPanel market={market} isCreator={false} onSuccess={invalidate} />
+          {/* Oracle price ticker */}
+          <OraclePriceTicker market={market} />
 
-        {hasPos && (
-          <ClaimPanel
-            marketId={market.id}
-            position={position!}
-            poolRevealed={market.poolRevealed}
+          {/* Settlement panel */}
+          {market.poolRevealed && (
+            <div className="bg-surface border border-wire p-5">
+              <div className="section-header mb-4">AGGREGATE REVEAL</div>
+              <SettlementPanel market={market} />
+            </div>
+          )}
+
+          {/* Protocol state / timeline */}
+          <div className="bg-surface border border-wire overflow-hidden">
+            <div className="px-5 py-3 border-b border-wire">
+              <span className="section-header">PROTOCOL STATE</span>
+            </div>
+            <EpochLifecycle status={market.epochStatus} />
+          </div>
+
+        </div>
+
+        {/* ── Right column — sticky action panel ────────────────────────── */}
+        <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 lg:sticky lg:top-20">
+          <ActionPanel
+            market={market}
+            position={position}
+            isCreator={isCreator}
             onSuccess={invalidate}
           />
-        )}
-
-        {!hasPos && market.epochStatus !== "accumulating" && (
-          <p className="font-body text-[13px] text-ink-dim">
-            No position held in this epoch.
-          </p>
-        )}
-      </div>
-
-      {/* Resolved outcome banner */}
-      {market.resolved && market.outcome !== UNRESOLVED && (
-        <div className={`border p-4 flex items-center gap-4 ${
-          market.outcome === SIDE_YES
-            ? "border-teal/40 bg-teal-faint"
-            : "border-crimson/40 bg-crimson/5"
-        }`}>
-          <span className="data-label">RESOLVED</span>
-          <span className={`font-display text-3xl ${
-            market.outcome === SIDE_YES ? "text-teal" : "text-crimson"
-          }`}>
-            {market.outcome === SIDE_YES ? "YES" : "NO"}
-          </span>
         </div>
-      )}
+
+      </div>
     </motion.div>
   );
 }

@@ -61,7 +61,9 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
     uint256 public constant MIN_TOKEN_BET = 1e4; // 0.01 USDC (6 decimals)
 
     // Deployed cUSDC on Sepolia — ERC7984ERC20Wrapper wrapping USDC
-    address public constant CUSDC_TOKEN = 0xfDBFC62F97A7988515a2684fA427d449fA7a6BAe;
+    // Official Zama cUSDC (Mock) on Sepolia — from github.com/zama-ai/protocol-apps
+    // Underlying mock USDC: 0x9b5Cd13b8eFbB58Dc25A05CF411D8056058aDFfF
+    address public constant CUSDC_TOKEN = 0x7c5BF43B851c1dff1a4feE8dB225b87f2C223639;
 
     /// @dev Returns the token address to use for token markets.
     ///      Virtual so test harness can override with a mock address.

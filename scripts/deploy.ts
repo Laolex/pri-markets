@@ -7,7 +7,7 @@ async function main() {
   console.log("Balance:", ethers.formatEther(balance), "ETH");
   console.log("Network:", network.name);
 
-  if (balance < ethers.parseEther("0.01")) {
+  if (balance < ethers.parseEther("0.004")) {
     throw new Error("Insufficient balance for deployment — fund the deployer first");
   }
 

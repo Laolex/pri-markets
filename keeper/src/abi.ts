@@ -21,4 +21,4 @@ export const ABI = [
   "function onPayoutRevealed(uint256 marketId, address bettor, bytes32[] calldata handlesList, bytes calldata cleartexts, bytes calldata decryptionProof) external",
 ] as const;
 
-export const CONTRACT_ADDRESS = "0x234780242f26E891cb3167F396049b104EAF25D0";
+export const CONTRACT_ADDRESS = "0x06F2f1B8B5e41575a17A7EFB91Ce4d4561FF5Ae3";
