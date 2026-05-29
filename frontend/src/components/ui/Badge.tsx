@@ -11,6 +11,20 @@ const variants: Record<Variant, string> = {
 };
 
 export function Badge({ children, variant = "dim" }: { children: ReactNode; variant?: Variant }) {
+  if (variant === "active") {
+    return (
+      <span className="relative inline-flex items-center gap-1.5 status-pill border bg-gold text-void border-gold">
+        {/* Animated live indicator */}
+        <span className="relative flex h-2 w-2 flex-shrink-0">
+          <span className="absolute inline-flex h-full w-full rounded-full bg-void animate-ring-expand opacity-60" />
+          <span className="absolute inline-flex h-full w-full rounded-full bg-void animate-ring-expand-2 opacity-60" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-void" />
+        </span>
+        {children}
+      </span>
+    );
+  }
+
   return (
     <span className={`status-pill border ${variants[variant]}`}>
       {children}

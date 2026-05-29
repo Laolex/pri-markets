@@ -226,19 +226,35 @@ export function MarketDetail() {
       {/* Back */}
       <Link
         to="/"
-        className="font-mono text-[10px] tracking-widest text-ink-dim hover:text-gold transition-colors"
+        className="inline-flex items-center gap-2 font-mono text-[10px] tracking-widest text-ink-dim hover:text-gold transition-colors group"
       >
-        ← ALL EPOCHS
+        <span className="transition-transform group-hover:-translate-x-0.5">←</span>
+        ALL EPOCHS
       </Link>
 
       {/* Header card */}
-      <div className="bg-surface border border-wire notched-lg overflow-hidden">
+      <div className={`bg-surface border notched-lg overflow-hidden relative ${
+        market.epochStatus === "accumulating"
+          ? "border-gold/20 shadow-inset-gold"
+          : market.poolRevealed
+          ? "border-teal/20 shadow-inset-teal"
+          : "border-wire"
+      }`}>
+        {/* Status accent line */}
+        <div className={`h-px w-full ${
+          market.epochStatus === "accumulating"
+            ? "bg-gradient-to-r from-transparent via-gold/40 to-transparent"
+            : market.poolRevealed
+            ? "bg-gradient-to-r from-transparent via-teal/40 to-transparent"
+            : "bg-wire"
+        }`} />
+
         <div className="flex items-center justify-between px-5 py-3 border-b border-wire">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <span className="font-mono text-[10px] text-ink-dim">
               CBC-{String(market.id + 1).padStart(3, "0")}
             </span>
-            <span className="font-mono text-[10px] text-ink-dim">·</span>
+            <span className="text-wire">·</span>
             <span className="addr-display">{shortAddr(market.creator)}</span>
             {isCreator && (
               <span className="font-mono text-[9px] tracking-widest bg-gold-faint border border-gold-border text-gold px-2 py-0.5">
@@ -250,13 +266,23 @@ export function MarketDetail() {
                 ⬡ ORACLE
               </span>
             )}
+            {market.isTokenMarket && (
+              <span className="font-mono text-[9px] tracking-widest bg-gold-faint border border-gold-border text-gold px-2 py-0.5">
+                cUSDC
+              </span>
+            )}
           </div>
           <MarketStatusBadge status={market.epochStatus} />
         </div>
-        <div className="px-5 py-5">
-          <h1 className="font-body text-[20px] text-ink-primary leading-snug">
+        <div className="px-5 py-6">
+          <h1 className="font-body text-[22px] text-ink-primary leading-snug">
             {market.question}
           </h1>
+          {market.participantCount > 0n && (
+            <div className="font-mono text-[10px] text-ink-dim mt-2 tracking-wider">
+              {market.participantCount.toString()} PARTICIPANT{market.participantCount !== 1n ? "S" : ""}
+            </div>
+          )}
         </div>
       </div>
 

@@ -7,79 +7,103 @@ import { PrivacyBoundary } from "@/components/ui/PrivacyBoundary";
 import { useAccount } from "wagmi";
 import { Link } from "react-router-dom";
 
+// ── Hero section ──────────────────────────────────────────────────────────
+
 const PILLARS = [
   {
     id: "01",
     title: "SEALED ACCUMULATION",
     desc: "Directional intent accumulates privately. No bid is observable during the epoch window.",
+    accent: "gold",
   },
   {
     id: "02",
     title: "AGGREGATE REVEAL",
     desc: "YES/NO split published once at epoch close — P_t^dir = ∅ for all t < t_close.",
+    accent: "teal",
   },
   {
     id: "03",
     title: "FHE SETTLEMENT",
-    desc: "Payout computed via FHE.select. Your side is never revealed on-chain, ever.",
+    desc: "Payout via FHE.select. Your YES/NO side is never revealed on-chain, ever.",
+    accent: "teal",
   },
 ];
 
 function Hero() {
   return (
-    <section className="pt-4 pb-16">
+    <section className="pt-2 pb-14">
       {/* Classification stamp */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.6 }}
-        className="flex items-center gap-3 mb-10"
+        transition={{ duration: 0.8 }}
+        className="flex items-center gap-4 mb-12"
       >
-        <div className="h-px flex-1 bg-wire" />
-        <span className="font-mono text-[10px] tracking-widest2 text-ink-dim">
+        <div className="h-px flex-1 bg-gradient-to-r from-transparent to-wire" />
+        <span className="font-mono text-[9px] tracking-widest2 text-ink-dim">
           CBC / SEALED-BID / FHEVM / SEPOLIA
         </span>
-        <div className="h-px flex-1 bg-wire" />
+        <div className="h-px flex-1 bg-gradient-to-l from-transparent to-wire" />
       </motion.div>
 
       {/* Main headline */}
-      <div className="mb-10">
+      <div className="mb-12">
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
+          initial={{ opacity: 0, y: 32 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
         >
-          <h1 className="font-display text-[72px] sm:text-[96px] leading-none tracking-widest text-ink-primary">
+          <h1
+            className="font-display text-[80px] sm:text-[108px] leading-none tracking-widest text-ink-primary"
+            style={{ lineHeight: "0.92" }}
+          >
             SEALED
           </h1>
-          <h1 className="font-display text-[72px] sm:text-[96px] leading-none tracking-widest text-gold">
+          <h1
+            className="font-display text-[80px] sm:text-[108px] leading-none tracking-widest text-gold"
+            style={{
+              lineHeight: "0.92",
+              textShadow: "0 0 60px rgba(196,153,59,0.2)",
+            }}
+          >
             CAPITAL.
           </h1>
         </motion.div>
 
         <motion.p
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="font-body text-[16px] text-ink-secondary leading-relaxed max-w-xl mt-6"
+          transition={{ delay: 0.25, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          className="font-body text-[15px] text-ink-secondary leading-relaxed max-w-lg mt-8"
         >
-          Traditional prediction markets leak directional flow continuously — creating reflexive
-          momentum, copy-trading, and pre-settlement signaling. This protocol accumulates
-          sealed bids and reveals only aggregate clearing price at epoch close.
+          Traditional prediction markets leak directional flow continuously — creating
+          reflexive momentum, copy-trading, and pre-settlement signaling. This protocol
+          accumulates sealed bids and reveals only aggregate clearing price at epoch close.
         </motion.p>
       </div>
 
       {/* Three pillars */}
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5, duration: 0.6 }}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.45, duration: 0.6 }}
         className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-wire"
       >
-        {PILLARS.map(({ id, title, desc }) => (
-          <div key={id} className="bg-void p-5">
-            <div className="font-mono text-[10px] text-ink-dim mb-3">{id} /</div>
-            <div className="font-mono text-[11px] tracking-widest text-gold mb-2">{title}</div>
+        {PILLARS.map(({ id, title, desc, accent }) => (
+          <div key={id} className="bg-surface p-5 relative overflow-hidden group">
+            {/* Top accent */}
+            <div className={`absolute top-0 left-0 right-0 h-px ${
+              accent === "gold"
+                ? "bg-gradient-to-r from-transparent via-gold/50 to-transparent"
+                : "bg-gradient-to-r from-transparent via-teal/50 to-transparent"
+            }`} />
+            <div className="font-mono text-[9px] text-ink-dim mb-3 tracking-widest">{id} /</div>
+            <div className={`font-mono text-[11px] tracking-widest mb-2 ${
+              accent === "gold" ? "text-gold" : "text-teal"
+            }`}>
+              {title}
+            </div>
             <p className="font-body text-[13px] text-ink-secondary leading-relaxed">{desc}</p>
           </div>
         ))}
@@ -95,8 +119,13 @@ function EmptyState() {
       animate={{ opacity: 1 }}
       className="bg-surface border border-wire py-20 text-center"
     >
-      <div className="font-display text-5xl text-wire mb-4">NO EPOCHS</div>
-      <p className="font-body text-ink-secondary text-[14px] mb-6">
+      <div
+        className="font-display text-6xl text-wire mb-4 tracking-widest"
+        style={{ textShadow: "0 0 40px rgba(26,37,53,0.8)" }}
+      >
+        NO EPOCHS
+      </div>
+      <p className="font-body text-ink-secondary text-[14px] mb-8">
         No information markets have been initialized.
       </p>
       <Link to="/create" className="btn-gold">
@@ -106,36 +135,42 @@ function EmptyState() {
   );
 }
 
+// ── Main export ───────────────────────────────────────────────────────────
+
 export function Home() {
   const { isConnected } = useAccount();
-  const { data: count } = useMarketCount();
+  const { data: count }            = useMarketCount();
   const { data: markets, isLoading } = useMarkets();
   const n = count ? Number(count) : 0;
+
+  const liveCount = markets?.filter(m => m.epochStatus === "accumulating").length ?? 0;
 
   return (
     <div>
       {!isConnected && <Hero />}
 
-      {/* Judge onboarding strip — visible when disconnected and markets exist */}
+      {/* Judge onboarding strip */}
       {!isConnected && n > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.9, duration: 0.4 }}
-          className="mb-8 border border-teal/30 bg-teal-faint px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+          className="mb-10 border border-teal/25 bg-teal/[0.03] px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
         >
           <div className="flex items-start gap-3">
-            <div className="w-1.5 h-1.5 rounded-full bg-teal mt-1.5 flex-shrink-0 animate-pulse-gold" />
+            <div className="relative flex-shrink-0 mt-1">
+              <span className="absolute w-3 h-3 rounded-full bg-teal/30 animate-ring-expand" />
+              <span className="relative w-3 h-3 rounded-full bg-teal block" />
+            </div>
             <div>
               <div className="font-mono text-[10px] tracking-widest text-teal mb-1">
-                {n} LIVE EPOCH{n !== 1 ? "S" : ""} — SEALED POOLS ACCUMULATING
+                {liveCount} LIVE EPOCH{liveCount !== 1 ? "S" : ""} — SEALED POOLS ACCUMULATING
               </div>
               <p className="font-body text-[13px] text-ink-secondary">
                 Connect a Sepolia wallet to place a sealed bid. Need ETH?{" "}
                 <a
                   href="https://cloud.google.com/application/web3/faucet/ethereum/sepolia"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  target="_blank" rel="noopener noreferrer"
                   className="text-teal underline underline-offset-2 hover:text-white transition-colors"
                 >
                   Google Faucet
@@ -143,18 +178,16 @@ export function Home() {
                 {" or "}
                 <a
                   href="https://sepolia-faucet.pk910.de/"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  target="_blank" rel="noopener noreferrer"
                   className="text-teal underline underline-offset-2 hover:text-white transition-colors"
                 >
                   PoW Faucet
                 </a>
-                .
               </p>
             </div>
           </div>
           <div className="font-mono text-[10px] text-ink-dim flex-shrink-0">
-            MIN BET: 0.001 ETH
+            MIN BET · 0.001 ETH
           </div>
         </motion.div>
       )}
@@ -171,12 +204,15 @@ export function Home() {
 
       {/* Epoch listing */}
       <section>
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between mb-6">
           <div className="flex items-baseline gap-3">
-            <span className="font-display text-xl tracking-widest text-ink-primary">EPOCHS</span>
+            <span className="font-display text-2xl tracking-widest text-ink-primary">EPOCHS</span>
             {n > 0 && (
               <span className="font-mono text-[11px] text-ink-dim">
                 {n} TOTAL
+                {liveCount > 0 && (
+                  <span className="text-gold ml-2">· {liveCount} LIVE</span>
+                )}
               </span>
             )}
           </div>
@@ -186,7 +222,7 @@ export function Home() {
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-20 gap-3">
+          <div className="flex items-center justify-center py-24 gap-3">
             <Spinner size={20} />
             <span className="font-mono text-[11px] text-ink-secondary tracking-wider">
               LOADING EPOCHS
@@ -195,7 +231,7 @@ export function Home() {
         ) : !markets || markets.length === 0 ? (
           <EmptyState />
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {[...markets].reverse().map((m, i) => (
               <MarketCard key={m.id} market={m} index={i} />
             ))}
@@ -203,13 +239,13 @@ export function Home() {
         )}
       </section>
 
-      {/* Clearing price history — only shows when epochs have been revealed */}
+      {/* Clearing price history */}
       {markets && markets.length > 0 && (
         <motion.section
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3, duration: 0.5 }}
-          className="mt-10"
+          className="mt-12"
         >
           <ClearingPriceHistory markets={markets} />
         </motion.section>

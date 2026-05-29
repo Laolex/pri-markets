@@ -19,9 +19,21 @@
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: #080E1A; }
   ::-webkit-scrollbar-thumb { background: #1A2535; border-radius: 2px; }
-  ::-webkit-scrollbar-thumb:hover { background: #C4993B40; }
+  ::-webkit-scrollbar-thumb:hover { background: #C4993B50; }
 
   ::selection { background: #C4993B30; color: #DDB84A; }
+}
+
+/* ─── Ambient background — subtle radial glow from top ──────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 90% 55% at 50% -5%, rgba(196,153,59,0.055) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 35% at 15% 80%, rgba(46,196,182,0.025) 0%, transparent 55%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* ─── Grain overlay ─────────────────────────────────────────── */
@@ -30,7 +42,7 @@
   position: fixed;
   inset: 0;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  opacity: 0.028;
+  opacity: 0.032;
   pointer-events: none;
   z-index: 9999;
 }
@@ -44,8 +56,8 @@
     0deg,
     transparent,
     transparent 2px,
-    rgba(0, 0, 0, 0.04) 2px,
-    rgba(0, 0, 0, 0.04) 4px
+    rgba(0,0,0,0.035) 2px,
+    rgba(0,0,0,0.035) 4px
   );
   pointer-events: none;
   z-index: 9998;
@@ -54,24 +66,42 @@
 /* ─── Components ────────────────────────────────────────────── */
 @layer components {
 
-  /* Panel / card */
+  /* ── Panel / card ─────────────────────────────────────────── */
   .intel-card {
     @apply bg-surface border border-wire relative overflow-hidden;
-    transition: border-color 0.2s ease, transform 0.2s ease;
+    transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
   }
   .intel-card::before {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(196, 153, 59, 0.03) 0%, transparent 50%);
+    background: linear-gradient(135deg, rgba(196,153,59,0.035) 0%, transparent 55%);
     pointer-events: none;
   }
   .intel-card:hover {
-    border-color: #C4993B40;
-    transform: translateY(-1px);
+    border-color: rgba(196,153,59,0.28);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 28px rgba(196,153,59,0.07);
   }
 
-  /* Corner notch — classified folder aesthetic */
+  /* Live card — gold glow */
+  .intel-card.card-live {
+    border-color: rgba(196,153,59,0.18);
+    box-shadow: inset 0 0 80px rgba(196,153,59,0.03);
+  }
+  .intel-card.card-live:hover {
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 40px rgba(196,153,59,0.1), inset 0 0 60px rgba(196,153,59,0.03);
+  }
+
+  /* Revealed card — teal glow */
+  .intel-card.card-revealed {
+    border-color: rgba(46,196,182,0.18);
+  }
+  .intel-card.card-revealed:hover {
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 40px rgba(46,196,182,0.1);
+  }
+
+  /* ── Corner notch ─────────────────────────────────────────── */
   .notched {
     clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
   }
@@ -79,17 +109,15 @@
     clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 0 100%);
   }
 
-  /* Section header */
+  /* ── Typography ───────────────────────────────────────────── */
   .section-header {
     @apply font-mono text-[10px] tracking-widest text-ink-secondary uppercase;
   }
-
-  /* Data label */
   .data-label {
     @apply font-mono text-[10px] tracking-widest text-ink-dim uppercase;
   }
 
-  /* Sealed / redacted bar */
+  /* ── Sealed / redacted bar — animated stripes ─────────────── */
   .sealed-bar {
     background: repeating-linear-gradient(
       45deg,
@@ -98,47 +126,120 @@
       #0C1522 4px,
       #0C1522 8px
     );
+    background-size: 28px 28px;
+    animation: stripe-drift 4s linear infinite;
     @apply rounded-sm;
   }
 
-  /* Button — primary (gold) */
+  /* ── Buttons ──────────────────────────────────────────────── */
   .btn-gold {
     @apply font-mono text-[12px] tracking-wider text-void bg-gold uppercase
-           px-5 py-2.5 transition-all duration-150
+           px-5 py-2.5 transition-all duration-200
            disabled:opacity-30 disabled:cursor-not-allowed;
     clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
   }
   .btn-gold:not(:disabled):hover {
     @apply bg-gold-bright;
-    transform: translateY(-1px);
+    transform: translateY(-2px);
+    box-shadow: 0 0 24px rgba(196,153,59,0.45), 0 4px 16px rgba(0,0,0,0.3);
   }
-  .btn-gold:not(:disabled):active { transform: translateY(0); }
+  .btn-gold:not(:disabled):active {
+    transform: translateY(0);
+    box-shadow: none;
+  }
 
-  /* Button — ghost */
   .btn-ghost {
     @apply font-mono text-[12px] tracking-wider text-ink-secondary uppercase
-           px-5 py-2.5 border border-wire transition-all duration-150
+           px-5 py-2.5 border border-wire transition-all duration-200
            disabled:opacity-30 disabled:cursor-not-allowed;
   }
   .btn-ghost:not(:disabled):hover {
     @apply border-gold-border text-gold;
+    box-shadow: 0 0 16px rgba(196,153,59,0.15);
   }
 
-  /* Status pill */
+  /* ── Status pill ──────────────────────────────────────────── */
   .status-pill {
     @apply font-mono text-[10px] tracking-widest uppercase px-2.5 py-1;
   }
 
-  /* Input field */
+  /* ── Input ────────────────────────────────────────────────── */
   .intel-input {
     @apply w-full bg-base border border-wire font-mono text-ink-primary text-[13px]
-           px-3 py-2.5 outline-none transition-colors duration-150
+           px-3 py-2.5 outline-none transition-all duration-200
            placeholder:text-ink-dim;
   }
-  .intel-input:focus { @apply border-gold-border; }
+  .intel-input:focus {
+    @apply border-gold-border;
+    box-shadow: 0 0 0 1px rgba(196,153,59,0.15), inset 0 0 20px rgba(196,153,59,0.03);
+  }
 
-  /* Monospace address display */
+  /* ── Address display ──────────────────────────────────────── */
   .addr-display {
     @apply font-mono text-[11px] text-ink-dim tracking-wide;
+  }
+
+  /* ── Glow utilities ───────────────────────────────────────── */
+  .glow-gold {
+    box-shadow: 0 0 24px rgba(196,153,59,0.35), 0 0 60px rgba(196,153,59,0.12);
+  }
+  .glow-teal {
+    box-shadow: 0 0 24px rgba(46,196,182,0.35), 0 0 60px rgba(46,196,182,0.12);
+  }
+  .glow-crimson {
+    box-shadow: 0 0 24px rgba(196,64,64,0.35);
+  }
+
+  /* ── Timeline connector ───────────────────────────────────── */
+  .timeline-line-done {
+    background: linear-gradient(to bottom, #2EC4B6, rgba(46,196,182,0.3));
+  }
+  .timeline-line-active {
+    background: linear-gradient(to bottom, rgba(196,153,59,0.6), transparent);
+  }
+  .timeline-line-pending {
+    background: #1A2535;
+  }
+
+  /* ── Countdown cell ───────────────────────────────────────── */
+  .countdown-cell {
+    @apply relative bg-base border border-wire flex flex-col items-center justify-center;
+    min-width: 52px;
+    min-height: 56px;
+  }
+  .countdown-cell::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -1px;
+    right: -1px;
+    height: 1px;
+    background: rgba(196,153,59,0.15);
+    pointer-events: none;
+  }
+
+  /* ── Data scan effect ─────────────────────────────────────── */
+  .data-scan {
+    position: relative;
+    overflow: hidden;
+  }
+  .data-scan::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(46,196,182,0.08) 50%,
+      transparent 100%
+    );
+    animation: scan-right 2.5s cubic-bezier(0.4,0,0.6,1) infinite;
+    pointer-events: none;
+  }
+
+  /* ── Hex step indicator ───────────────────────────────────── */
+  .hex-step {
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    @apply flex items-center justify-center;
   }
 }
