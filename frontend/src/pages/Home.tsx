@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useMarkets, useMarketCount } from "@/hooks/useMarkets";
 import { MarketCard } from "@/components/market/MarketCard";
+import { ClearingPriceHistory } from "@/components/market/ClearingPriceHistory";
 import { Spinner } from "@/components/ui/Spinner";
 import { PrivacyBoundary } from "@/components/ui/PrivacyBoundary";
 import { useAccount } from "wagmi";
@@ -115,6 +116,49 @@ export function Home() {
     <div>
       {!isConnected && <Hero />}
 
+      {/* Judge onboarding strip — visible when disconnected and markets exist */}
+      {!isConnected && n > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.9, duration: 0.4 }}
+          className="mb-8 border border-teal/30 bg-teal-faint px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+        >
+          <div className="flex items-start gap-3">
+            <div className="w-1.5 h-1.5 rounded-full bg-teal mt-1.5 flex-shrink-0 animate-pulse-gold" />
+            <div>
+              <div className="font-mono text-[10px] tracking-widest text-teal mb-1">
+                {n} LIVE EPOCH{n !== 1 ? "S" : ""} — SEALED POOLS ACCUMULATING
+              </div>
+              <p className="font-body text-[13px] text-ink-secondary">
+                Connect a Sepolia wallet to place a sealed bid. Need ETH?{" "}
+                <a
+                  href="https://cloud.google.com/application/web3/faucet/ethereum/sepolia"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-teal underline underline-offset-2 hover:text-white transition-colors"
+                >
+                  Google Faucet
+                </a>
+                {" or "}
+                <a
+                  href="https://sepolia-faucet.pk910.de/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-teal underline underline-offset-2 hover:text-white transition-colors"
+                >
+                  PoW Faucet
+                </a>
+                .
+              </p>
+            </div>
+          </div>
+          <div className="font-mono text-[10px] text-ink-dim flex-shrink-0">
+            MIN BET: 0.001 ETH
+          </div>
+        </motion.div>
+      )}
+
       {/* Information topology */}
       <motion.section
         initial={{ opacity: 0, y: 12 }}
@@ -158,6 +202,18 @@ export function Home() {
           </div>
         )}
       </section>
+
+      {/* Clearing price history — only shows when epochs have been revealed */}
+      {markets && markets.length > 0 && (
+        <motion.section
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3, duration: 0.5 }}
+          className="mt-10"
+        >
+          <ClearingPriceHistory markets={markets} />
+        </motion.section>
+      )}
     </div>
   );
 }

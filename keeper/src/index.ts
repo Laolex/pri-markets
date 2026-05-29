@@ -2,12 +2,14 @@ import { ethers } from "ethers";
 import { ABI, CONTRACT_ADDRESS } from "./abi.js";
 import { publicDecrypt } from "./zama.js";
 import { loadState, saveState } from "./state.js";
+import { refreshDemoMarkets } from "./refresh.js";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const POLL_MS     = 30_000;  // 30 s between sweeps
-const BLOCK_RANGE = 500;     // max blocks per query
-const DEPLOY_BLOCK = 10_940_944; // contract deployment block — oracle backfill start
+const POLL_MS          = 30_000;        // 30 s between sweeps
+const REFRESH_INTERVAL = 6 * 60 * 60;  // 6 hours in seconds — how often to check demo slots
+const BLOCK_RANGE      = 500;           // max blocks per query
+const DEPLOY_BLOCK     = 10_940_944;    // contract deployment block — oracle backfill start
 
 function requireEnv(key: string): string {
   const v = process.env[key];
@@ -190,7 +192,8 @@ async function main() {
 
   const state = loadState();
   let { lastBlock } = state;
-  const oracleMarketIds = new Set<number>(state.oracleMarketIds);
+  const oracleMarketIds  = new Set<number>(state.oracleMarketIds);
+  let lastRefreshAt      = 0; // unix seconds — 0 forces immediate first run
 
   if (lastBlock === 0) {
     lastBlock = Math.max(0, (await provider.getBlockNumber()) - 1);
@@ -228,6 +231,13 @@ async function main() {
         saveState({ lastBlock, oracleMarketIds: [...oracleMarketIds] });
       }
       await resolveEligibleOracleMarkets(contract, [...oracleMarketIds]);
+
+      // Refresh demo market slots on startup and every 6 hours
+      const now = Math.floor(Date.now() / 1000);
+      if (now - lastRefreshAt >= REFRESH_INTERVAL) {
+        await refreshDemoMarkets(wallet, CONTRACT_ADDRESS, log);
+        lastRefreshAt = now;
+      }
     } catch (e) {
       console.error("[keeper] poll error:", e);
     }

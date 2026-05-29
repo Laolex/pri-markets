@@ -7,6 +7,7 @@ import { useMarket, usePosition } from "@/hooks/useMarkets";
 import { useQueryClient } from "@tanstack/react-query";
 import { MarketStatusBadge } from "@/components/market/MarketStatusBadge";
 import { MarketCountdown } from "@/components/market/MarketCountdown";
+import { OraclePriceTicker } from "@/components/market/OraclePriceTicker";
 import { EpochLifecycle } from "@/components/ui/EpochLifecycle";
 import { BetPanel } from "@/components/auction/BetPanel";
 import { RevealPanel } from "@/components/auction/RevealPanel";
@@ -291,6 +292,9 @@ export function MarketDetail() {
           )}
         </div>
       </div>
+
+      {/* Live oracle price ticker — visible for all oracle markets */}
+      <OraclePriceTicker market={market} />
 
       {/* Settlement */}
       {market.poolRevealed && (

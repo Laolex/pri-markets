@@ -97,17 +97,39 @@ export function Layout() {
               occurs post-settlement via payout observation. See MECHANISM.md.
             </p>
           </div>
-          <div className="text-right">
-            <div className="data-label mb-1">CONTRACT</div>
-            <a
-              href={`https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="addr-display hover:text-gold transition-colors"
-            >
-              {CONTRACT_ADDRESS}
-            </a>
-            <div className="font-mono text-[10px] text-ink-dim mt-0.5">SEPOLIA TESTNET</div>
+          <div className="text-right space-y-2">
+            <div>
+              <div className="data-label mb-1">CONTRACT</div>
+              <a
+                href={`https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="addr-display hover:text-gold transition-colors"
+              >
+                {CONTRACT_ADDRESS}
+              </a>
+              <div className="font-mono text-[10px] text-ink-dim mt-0.5">SEPOLIA TESTNET</div>
+            </div>
+            <div>
+              <div className="data-label mb-1">NEED SEPOLIA ETH?</div>
+              <a
+                href="https://cloud.google.com/application/web3/faucet/ethereum/sepolia"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-[10px] text-teal hover:text-white transition-colors"
+              >
+                Google Faucet ↗
+              </a>
+              <span className="font-mono text-[10px] text-ink-dim mx-2">·</span>
+              <a
+                href="https://sepolia-faucet.pk910.de/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-[10px] text-teal hover:text-white transition-colors"
+              >
+                PoW Faucet ↗
+              </a>
+            </div>
           </div>
         </div>
       </footer>

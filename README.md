@@ -84,6 +84,10 @@ npx hardhat vars set PRIVATE_KEY
 npx hardhat vars set SEPOLIA_RPC_URL
 npx hardhat run scripts/deploy.ts --network sepolia
 
+# Seed demo markets (run once before submission — creates 14-day oracle epochs)
+# that stay ACCUMULATING throughout a 2-week judging window
+npx hardhat run scripts/seed-demo.ts --network sepolia
+
 # Gas measurement (starts local node automatically)
 npx hardhat node &
 npx hardhat run scripts/measure-epoch.ts --network localhost
@@ -91,6 +95,17 @@ npx hardhat run scripts/measure-epoch.ts --network localhost
 # Frontend
 cd frontend && npm install && npm run dev
 ```
+
+## Demo Freshness
+
+The live demo at `confidential-batch-auction.vercel.app` is seeded with 14-day oracle
+epochs covering ETH/USD, BTC/USD, and LINK/USD at varying strike prices. These stay
+in ACCUMULATING state for two weeks — judges can connect a Sepolia wallet and place
+sealed bids at any point in the judging window.
+
+Faucets for Sepolia ETH:
+- https://cloud.google.com/application/web3/faucet/ethereum/sepolia
+- https://sepolia-faucet.pk910.de/
 
 ## Test Results
 
