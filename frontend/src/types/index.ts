@@ -24,17 +24,31 @@ export interface MarketView {
   priceFeed: string;
   strikePrice: bigint;
   useOracle: boolean;
+  // Token market
+  isTokenMarket: boolean;
+  token: string;
+  participantCount: bigint;
 }
 
 export interface PositionView {
   amount: bigint;
   payoutRequested: boolean;
   claimed: boolean;
+  isToken: boolean;
 }
+
+// cUSDC on Sepolia
+export const CUSDC_TOKEN  = "0xfDBFC62F97A7988515a2684fA427d449fA7a6BAe";
+export const USDC_TOKEN   = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
+export const USDC_DECIMALS = 6;
 
 export const SIDE_NO  = 0;
 export const SIDE_YES = 1;
 export const UNRESOLVED = 255;
+
+export function isTokenMarketView(m: MarketView): boolean {
+  return m.isTokenMarket && m.token !== "0x0000000000000000000000000000000000000000";
+}
 
 export function computeEpochStatus(m: MarketView): EpochStatus {
   const now = Math.floor(Date.now() / 1000);

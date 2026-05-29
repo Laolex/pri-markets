@@ -41,6 +41,11 @@ export function MarketCard({ market, index }: { market: MarketView; index: numbe
               ⬡ ORACLE
             </span>
           )}
+          {market.isTokenMarket && (
+            <span className="font-mono text-[9px] tracking-wider text-gold border border-gold-border px-1.5 py-0.5">
+              cUSDC
+            </span>
+          )}
         </div>
         <MarketStatusBadge status={market.epochStatus} />
       </div>

@@ -204,9 +204,12 @@ export function MarketDetail() {
     clearingPrice:       raw[9] as bigint,
     poolRevealRequested: raw[10] as boolean,
     poolRevealed:        raw[11] as boolean,
-    priceFeed:           (raw[12] as string) ?? "0x0000000000000000000000000000000000000000",
-    strikePrice:         (raw[13] as bigint) ?? 0n,
+    priceFeed:           (raw[12] as string)  ?? "0x0000000000000000000000000000000000000000",
+    strikePrice:         (raw[13] as bigint)  ?? 0n,
     useOracle:           (raw[14] as boolean) ?? false,
+    isTokenMarket:       (raw[15] as boolean) ?? false,
+    token:               (raw[16] as string)  ?? "0x0000000000000000000000000000000000000000",
+    participantCount:    (raw[17] as bigint)  ?? 0n,
     epochStatus:         "accumulating",
   };
   market.epochStatus = computeEpochStatus(market);
@@ -319,7 +322,7 @@ export function MarketDetail() {
         <div className="section-header">ACTIONS</div>
 
         {market.epochStatus === "accumulating" && !hasPos && (
-          <BetPanel marketId={market.id} onSuccess={invalidate} />
+          <BetPanel marketId={market.id} isTokenMarket={market.isTokenMarket} onSuccess={invalidate} />
         )}
 
         {market.epochStatus === "accumulating" && hasPos && (

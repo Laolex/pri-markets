@@ -12,10 +12,12 @@ function parseMarket(id: number, raw: readonly unknown[]): MarketView {
     creator, question, epochStart, epochEnd, resolved, outcome, totalEth,
     revealedYesPool, revealedNoPool, clearingPrice, poolRevealRequested, poolRevealed,
     priceFeed, strikePrice, useOracle,
+    isTokenMarket, token, participantCount,
   ] = raw as [
     string, string, bigint, bigint, boolean, number, bigint,
     bigint, bigint, bigint, boolean, boolean,
     string, bigint, boolean,
+    boolean, string, bigint,
   ];
   const m: MarketView = {
     id,
@@ -31,9 +33,12 @@ function parseMarket(id: number, raw: readonly unknown[]): MarketView {
     revealedNoPool,
     poolRevealRequested,
     poolRevealed,
-    priceFeed: priceFeed ?? "0x0000000000000000000000000000000000000000",
-    strikePrice: strikePrice ?? 0n,
-    useOracle: useOracle ?? false,
+    priceFeed:        priceFeed       ?? "0x0000000000000000000000000000000000000000",
+    strikePrice:      strikePrice     ?? 0n,
+    useOracle:        useOracle       ?? false,
+    isTokenMarket:    isTokenMarket   ?? false,
+    token:            token           ?? "0x0000000000000000000000000000000000000000",
+    participantCount: participantCount ?? 0n,
     epochStatus: "accumulating",
   };
   m.epochStatus = computeEpochStatus(m);
@@ -94,8 +99,8 @@ export function usePosition(marketId: number, address?: string) {
       enabled: !!address,
       refetchInterval: 5_000,
       select: (data) => {
-        const [amount, payoutRequested, claimed] = data as [bigint, boolean, boolean];
-        return amount > 0n ? { amount, payoutRequested, claimed } : null;
+        const [amount, payoutRequested, claimed, isToken] = data as [bigint, boolean, boolean, boolean];
+        return (amount > 0n || isToken) ? { amount, payoutRequested, claimed, isToken } : null;
       },
     },
   });

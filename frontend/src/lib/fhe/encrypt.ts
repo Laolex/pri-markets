@@ -33,6 +33,12 @@ export async function initFheInstance(
   }
 }
 
+const toHex = (v: unknown): `0x${string}` => {
+  if (typeof v === "string") return v.startsWith("0x") ? (v as `0x${string}`) : `0x${v}`;
+  if (v instanceof Uint8Array) return bytesToHex(v);
+  throw new Error(`FHE encrypt: unexpected type ${typeof v}`);
+};
+
 export async function encryptSide(
   fhevmInst: FhevmInstance,
   contractAddress: string,
@@ -42,18 +48,32 @@ export async function encryptSide(
   const buf = fhevmInst.createEncryptedInput(contractAddress, userAddress);
   buf.add8(BigInt(side));
   const enc = await buf.encrypt();
-
-  // SDK v0.4 returns Uint8Array for both handles and inputProof.
-  // viem's ABI encoder calls .replace() internally on bytes/bytes32 args,
-  // so we must pass 0x-prefixed hex strings — never raw Uint8Arrays.
-  const toHex = (v: unknown): `0x${string}` => {
-    if (typeof v === "string") return v.startsWith("0x") ? (v as `0x${string}`) : `0x${v}`;
-    if (v instanceof Uint8Array) return bytesToHex(v);
-    throw new Error(`encryptSide: unexpected type ${typeof v}`);
-  };
-
   return {
     handle:     toHex(enc.handles[0]),
+    inputProof: toHex(enc.inputProof),
+  };
+}
+
+/// Encrypts both side (uint8) and amount (uint64) in one proof batch.
+/// Returns handles[0]=side, handles[1]=amount, shared inputProof.
+export async function encryptSideAndAmount(
+  fhevmInst: FhevmInstance,
+  contractAddress: string,
+  userAddress: string,
+  side: number,
+  amountRaw: bigint  // raw token units (e.g. 1 USDC = 1_000_000n for 6 decimals)
+): Promise<{
+  encSide:    `0x${string}`;
+  encAmount:  `0x${string}`;
+  inputProof: `0x${string}`;
+}> {
+  const buf = fhevmInst.createEncryptedInput(contractAddress, userAddress);
+  buf.add8(BigInt(side));
+  buf.add64(amountRaw);
+  const enc = await buf.encrypt();
+  return {
+    encSide:    toHex(enc.handles[0]),
+    encAmount:  toHex(enc.handles[1]),
     inputProof: toHex(enc.inputProof),
   };
 }
