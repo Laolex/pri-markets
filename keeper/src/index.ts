@@ -9,7 +9,7 @@ import { refreshDemoMarkets } from "./refresh.js";
 const POLL_MS          = 30_000;        // 30 s between sweeps
 const REFRESH_INTERVAL = 6 * 60 * 60;  // 6 hours in seconds — how often to check demo slots
 const BLOCK_RANGE      = 10;            // Alchemy free tier max blocks per eth_getLogs request
-const DEPLOY_BLOCK     = 10_940_944;    // contract deployment block — oracle backfill start
+const DEPLOY_BLOCK     = 10_947_439;    // contract deployment block — oracle backfill start
 const FALLBACK_RPC     = "https://ethereum-sepolia-rpc.publicnode.com";
 
 function requireEnv(key: string): string {
