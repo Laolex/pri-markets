@@ -1,5 +1,20 @@
 # Confidential Batch Clearing
 
+<p align="center">
+  <a href="https://confidential-batch-auction.vercel.app"><img src="https://img.shields.io/badge/▶_Live_Demo-00C853?style=for-the-badge&logoColor=white" alt="Live Demo"/></a>
+  <img src="https://img.shields.io/badge/FHE_Market_Primitive-7aa2f7?style=for-the-badge" alt="category"/>
+  <img src="https://img.shields.io/badge/License-MIT-bb9af7?style=for-the-badge" alt="MIT"/>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Solidity_0.8.24-363636?style=flat-square&logo=solidity&logoColor=white"/>
+  <img src="https://img.shields.io/badge/fhEVM_(Zama)-FFD200?style=flat-square&logoColor=black"/>
+  <img src="https://img.shields.io/badge/Hardhat-FFF100?style=flat-square&logo=hardhat&logoColor=black"/>
+  <img src="https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black"/>
+  <img src="https://img.shields.io/badge/Sepolia-627EEA?style=flat-square&logo=ethereum&logoColor=white"/>
+</p>
+
+
 **Sealed-bid directional discovery for information markets — built on fhEVM**
 
 > No live order flow. No pre-trade signaling. Aggregate-only price discovery.
