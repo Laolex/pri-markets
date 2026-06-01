@@ -1,6 +1,5 @@
 import { useParams, Link } from "react-router-dom";
 import { useAccount, useWriteContract } from "wagmi";
-import { formatEther } from "viem";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useMarket, usePosition } from "@/hooks/useMarkets";
@@ -18,8 +17,8 @@ import { useAppStore } from "@/store/appStore";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "@/lib/contracts/config";
 import { type MarketView, SIDE_YES, SIDE_NO, UNRESOLVED, computeEpochStatus, SEPOLIA_FEEDS, fromFeedUnits } from "@/types";
 
-function fmtEth(wei: bigint) {
-  return Number(formatEther(wei)).toFixed(4);
+function fmtUsdc(raw: bigint) {
+  return (Number(raw) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 function shortAddr(addr: string) {
@@ -174,7 +173,6 @@ function ActionPanel({
         {isLive && !hasPos && (
           <BetPanel
             marketId={market.id}
-            isTokenMarket={market.isTokenMarket}
             onSuccess={onSuccess}
           />
         )}
@@ -190,10 +188,7 @@ function ActionPanel({
               <div className="min-w-0">
                 <div className="font-mono text-[10px] text-gold tracking-wider mb-1">BID SEALED</div>
                 <div className="font-mono text-[13px] text-ink-primary">
-                  {position?.isToken
-                    ? "cUSDC committed · direction encrypted"
-                    : `${fmtEth(position!.amount)} ETH committed · direction encrypted`
-                  }
+                  cUSDC committed · direction encrypted · top-ups accumulate
                 </div>
                 <div className="font-mono text-[10px] text-ink-dim mt-1.5">
                   Side: never observable · Pool: sealed until epoch close
@@ -313,18 +308,17 @@ export function MarketDetail() {
     epochEnd:            Number(raw[3] as bigint),
     resolved:            raw[4] as boolean,
     outcome:             Number(raw[5] as number),
-    totalEth:            raw[6] as bigint,
-    revealedYesPool:     raw[7] as bigint,
-    revealedNoPool:      raw[8] as bigint,
-    clearingPrice:       raw[9] as bigint,
-    poolRevealRequested: raw[10] as boolean,
-    poolRevealed:        raw[11] as boolean,
-    priceFeed:           (raw[12] as string)  ?? "0x0000000000000000000000000000000000000000",
-    strikePrice:         (raw[13] as bigint)  ?? 0n,
-    useOracle:           (raw[14] as boolean) ?? false,
-    isTokenMarket:       (raw[15] as boolean) ?? false,
-    token:               (raw[16] as string)  ?? "0x0000000000000000000000000000000000000000",
-    participantCount:    (raw[17] as bigint)  ?? 0n,
+    revealedYesPool:     raw[6] as bigint,
+    revealedNoPool:      raw[7] as bigint,
+    clearingPrice:       raw[8] as bigint,
+    poolRevealRequested: raw[9] as boolean,
+    poolRevealed:        raw[10] as boolean,
+    priceFeed:           (raw[11] as string)  ?? "0x0000000000000000000000000000000000000000",
+    strikePrice:         (raw[12] as bigint)  ?? 0n,
+    useOracle:           (raw[13] as boolean) ?? false,
+    token:               (raw[14] as string)  ?? "0x0000000000000000000000000000000000000000",
+    betCount:            (raw[15] as bigint)  ?? 0n,
+    bettorCount:         (raw[16] as bigint)  ?? 0n,
     epochStatus:         "accumulating",
   };
   market.epochStatus = computeEpochStatus(market);
@@ -377,20 +371,18 @@ export function MarketDetail() {
                     ⬡ ORACLE
                   </span>
                 )}
-                {market.isTokenMarket && (
-                  <span className="font-mono text-[9px] tracking-widest bg-gold-faint border border-gold-border text-gold px-2 py-0.5">
-                    cUSDC
-                  </span>
-                )}
+                <span className="font-mono text-[9px] tracking-widest bg-gold-faint border border-gold-border text-gold px-2 py-0.5">
+                  cUSDC
+                </span>
               </div>
             </div>
             <div className="px-5 py-6">
               <h1 className="font-body text-[22px] text-ink-primary leading-snug">
                 {market.question}
               </h1>
-              {market.participantCount > 0n && (
+              {market.bettorCount > 0n && (
                 <div className="font-mono text-[10px] text-ink-dim mt-2 tracking-wider">
-                  {market.participantCount.toString()} PARTICIPANT{market.participantCount !== 1n ? "S" : ""}
+                  {market.bettorCount.toString()} BETTOR{market.bettorCount !== 1n ? "S" : ""} · {market.betCount.toString()} BID{market.betCount !== 1n ? "S" : ""}
                 </div>
               )}
             </div>
@@ -411,12 +403,12 @@ export function MarketDetail() {
               )}
             </div>
             <div className="bg-surface px-4 py-4">
-              <div className="data-label mb-2">VOLUME</div>
+              <div className="data-label mb-2">{market.poolRevealed ? "TOTAL POOL" : "BIDS"}</div>
               <div className="flex items-baseline gap-1">
                 <span className="font-display text-[24px] leading-none text-ink-primary">
-                  {fmtEth(market.totalEth)}
+                  {market.poolRevealed ? fmtUsdc(market.revealedYesPool + market.revealedNoPool) : market.betCount.toString()}
                 </span>
-                <span className="font-mono text-[10px] text-ink-dim">ETH</span>
+                <span className="font-mono text-[10px] text-ink-dim">{market.poolRevealed ? "USDC" : "SEALED"}</span>
               </div>
             </div>
             <div className="bg-surface px-4 py-4">

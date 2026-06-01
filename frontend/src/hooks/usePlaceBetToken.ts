@@ -78,12 +78,12 @@ export function usePlaceBetToken() {
         rawAmount
       );
 
-      // Step 4: Place sealed token bet
-      setTxStatus("Submitting sealed token bid…");
+      // Step 4: Place sealed bet (V2 token-only `placeBet`; callable repeatedly for top-ups)
+      setTxStatus("Submitting sealed bid…");
       const hash = await writeContractAsync({
         address: CONTRACT_ADDRESS,
         abi: CONTRACT_ABI,
-        functionName: "placeBetToken",
+        functionName: "placeBet",
         args: [BigInt(marketId), encSide, encAmount, inputProof],
       });
 

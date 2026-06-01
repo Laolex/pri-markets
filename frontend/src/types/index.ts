@@ -13,7 +13,6 @@ export interface MarketView {
   epochEnd: number;
   resolved: boolean;
   outcome: number;
-  totalEth: bigint;
   clearingPrice: bigint;
   revealedYesPool: bigint;
   revealedNoPool: bigint;
@@ -24,17 +23,15 @@ export interface MarketView {
   priceFeed: string;
   strikePrice: bigint;
   useOracle: boolean;
-  // Token market
-  isTokenMarket: boolean;
+  // Token-only V2: all markets are cUSDC
   token: string;
-  participantCount: bigint;
+  betCount: bigint;      // total bids placed (counts top-ups)
+  bettorCount: bigint;   // unique addresses
 }
 
 export interface PositionView {
-  amount: bigint;
-  payoutRequested: boolean;
+  exists: boolean;
   claimed: boolean;
-  isToken: boolean;
 }
 
 // Official Zama cUSDC (Mock) on Sepolia — github.com/zama-ai/protocol-apps
@@ -54,8 +51,9 @@ export const SIDE_NO  = 0;
 export const SIDE_YES = 1;
 export const UNRESOLVED = 255;
 
+// V2 is token-only — every market is cUSDC. Kept for call-site compatibility.
 export function isTokenMarketView(m: MarketView): boolean {
-  return m.isTokenMarket && m.token !== "0x0000000000000000000000000000000000000000";
+  return m.token !== "0x0000000000000000000000000000000000000000";
 }
 
 export function computeEpochStatus(m: MarketView): EpochStatus {
