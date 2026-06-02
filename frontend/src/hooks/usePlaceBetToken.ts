@@ -17,14 +17,16 @@ const ERC20_ABI = [
   },
 ] as const;
 
-// cUSDC (ERC-7984) — depositFor wraps USDC; setOperator authorizes the auction to pull funds.
-// The auction's placeBet calls confidentialTransferFrom(bettor, auction, amt), which ERC-7984
-// only permits from an approved operator — there is no ERC-20-style allowance fallback.
+// cUSDC (ERC-7984 ERC20-wrapper) — wrap(to, amount) mints the encrypted balance from the
+// approved underlying; setOperator authorizes the auction to pull funds. The auction's placeBet
+// calls confidentialTransferFrom(bettor, auction, amt), which ERC-7984 only permits from an
+// approved operator — there is no ERC-20-style allowance fallback. (This is the same wrap entry-
+// point the VeilX wrapper engine uses; the wrapper has no depositFor.)
 const CUSDC_ABI = [
   {
-    inputs: [{ name: "account", type: "address" }, { name: "amount", type: "uint256" }],
-    name: "depositFor",
-    outputs: [{ name: "", type: "bool" }],
+    inputs: [{ name: "to", type: "address" }, { name: "amount", type: "uint256" }],
+    name: "wrap",
+    outputs: [],
     stateMutability: "nonpayable",
     type: "function",
   },
@@ -76,12 +78,12 @@ export function usePlaceBetToken() {
         args: [cusdcAddress, rawAmount],
       });
 
-      // Step 2: Wrap USDC → cUSDC (depositFor mints encrypted balance)
+      // Step 2: Wrap USDC → cUSDC (wrap mints the encrypted balance to `address`)
       setTxStatus("Wrapping USDC → cUSDC…");
       await writeContractAsync({
         address: cusdcAddress,
         abi: CUSDC_ABI,
-        functionName: "depositFor",
+        functionName: "wrap",
         args: [address, rawAmount],
       });
 
