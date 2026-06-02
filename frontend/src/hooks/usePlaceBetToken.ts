@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { parseUnits } from "viem";
-import { useWriteContract, useAccount } from "wagmi";
+import { useWriteContract, useAccount, usePublicClient } from "wagmi";
 import { encryptSideAndAmount } from "@/lib/fhe/encrypt";
 import { useAppStore } from "@/store/appStore";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "@/lib/contracts/config";
@@ -17,7 +17,9 @@ const ERC20_ABI = [
   },
 ] as const;
 
-// cUSDC depositFor — wraps USDC into cUSDC
+// cUSDC (ERC-7984) — depositFor wraps USDC; setOperator authorizes the auction to pull funds.
+// The auction's placeBet calls confidentialTransferFrom(bettor, auction, amt), which ERC-7984
+// only permits from an approved operator — there is no ERC-20-style allowance fallback.
 const CUSDC_ABI = [
   {
     inputs: [{ name: "account", type: "address" }, { name: "amount", type: "uint256" }],
@@ -26,10 +28,25 @@ const CUSDC_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
+  {
+    inputs: [{ name: "operator", type: "address" }, { name: "until", type: "uint48" }],
+    name: "setOperator",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "holder", type: "address" }, { name: "spender", type: "address" }],
+    name: "isOperator",
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function",
+  },
 ] as const;
 
 export function usePlaceBetToken() {
   const { address } = useAccount();
+  const publicClient = usePublicClient();
   const { fhevmInst, setTxStatus } = useAppStore();
   const { writeContractAsync } = useWriteContract();
   const [isPending, setIsPending] = useState(false);
@@ -67,6 +84,25 @@ export function usePlaceBetToken() {
         functionName: "depositFor",
         args: [address, rawAmount],
       });
+
+      // Step 2b: Authorize the auction as a cUSDC operator (idempotent — skip if already set).
+      // placeBet pulls via confidentialTransferFrom, which ERC-7984 permits only from operators.
+      const alreadyOperator = await publicClient?.readContract({
+        address: cusdcAddress,
+        abi: CUSDC_ABI,
+        functionName: "isOperator",
+        args: [address, CONTRACT_ADDRESS as `0x${string}`],
+      });
+      if (!alreadyOperator) {
+        setTxStatus("Authorizing auction to settle your bid…");
+        const until = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60; // 1 year (uint48 → number)
+        await writeContractAsync({
+          address: cusdcAddress,
+          abi: CUSDC_ABI,
+          functionName: "setOperator",
+          args: [CONTRACT_ADDRESS as `0x${string}`, until],
+        });
+      }
 
       // Step 3: Encrypt side + amount in one proof batch
       setTxStatus("Encrypting side and amount…");

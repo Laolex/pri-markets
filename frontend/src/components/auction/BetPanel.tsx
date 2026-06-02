@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { motion } from "framer-motion";
 import { usePlaceBetToken } from "@/hooks/usePlaceBetToken";
+import { useMintUsdc } from "@/hooks/useMintUsdc";
 import { usePosition } from "@/hooks/useMarkets";
 import { useAppStore } from "@/store/appStore";
 import { Spinner } from "@/components/ui/Spinner";
@@ -54,11 +55,17 @@ export function BetPanel({ marketId, onSuccess }: BetPanelProps) {
   const { isConnected, address } = useAccount();
   const { fheStatus } = useAppStore();
   const { placeBetToken, isPending, error } = usePlaceBetToken();
+  const { mintUsdc, refreshBalance, balance, isPending: minting, faucetAmount } = useMintUsdc();
   const { data: position } = usePosition(marketId, address);
   const [side, setSide]     = useState<number>(SIDE_YES);
   const [amount, setAmount] = useState("1");
   const fheReady = fheStatus === "ready";
   const hasPosition = !!position?.exists;
+  const lowBalance = balance !== null && Number(balance) < Number(amount || "0");
+
+  useEffect(() => {
+    if (isConnected && address) void refreshBalance();
+  }, [isConnected, address, refreshBalance]);
 
   if (!isConnected) {
     return (
@@ -115,8 +122,25 @@ export function BetPanel({ marketId, onSuccess }: BetPanelProps) {
           <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-ink-dim">USDC</span>
         </div>
         <p className="font-mono text-[10px] text-ink-dim mt-1.5">
-          Amount is encrypted. Three transactions: USDC approve → wrap → sealed bid.
+          Amount is encrypted. First bid: approve → wrap → authorize → seal (4 txns); top-ups skip authorize.
         </p>
+
+        {/* Test USDC faucet — USDCMock has an open mint() on Sepolia */}
+        <div className="flex items-center justify-between gap-2 mt-2 px-3 py-2 border border-wire bg-black/20">
+          <span className="font-mono text-[10px] text-ink-dim">
+            Test balance:{" "}
+            <span className={lowBalance ? "text-crimson" : "text-ink-secondary"}>
+              {balance === null ? "…" : `${Number(balance).toLocaleString()} USDC`}
+            </span>
+          </span>
+          <button
+            onClick={() => void mintUsdc()}
+            disabled={minting || isPending}
+            className="font-mono text-[10px] tracking-widest text-teal border border-teal/40 px-2.5 py-1 hover:bg-teal/10 transition-colors disabled:opacity-50"
+          >
+            {minting ? "MINTING…" : `+ MINT ${Number(faucetAmount).toLocaleString()} USDC`}
+          </button>
+        </div>
       </div>
 
       <button
