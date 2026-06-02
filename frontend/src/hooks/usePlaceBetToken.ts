@@ -69,25 +69,43 @@ export function usePlaceBetToken() {
     try {
       const rawAmount = parseUnits(amountUsdc, USDC_DECIMALS); // 6 decimals
 
-      // Step 1: Approve USDC to be spent by cUSDC wrapper
+      // Mine each tx before the next: the steps depend on each other (allowance → wrap →
+      // operator → transferFrom). Firing them back-to-back without waiting races the wallet
+      // nonce and can hang the UI after the first confirmation.
+      const mine = async (hash: `0x${string}`) => {
+        if (publicClient) await publicClient.waitForTransactionReceipt({ hash });
+      };
+
+      // Step 1: Encrypt FIRST. The relayer round-trip is the slowest, most failure-prone step;
+      // doing it before any token movement means a relayer hang/error can never strand wrapped
+      // cUSDC. Guarded by a timeout so a stuck relayer surfaces an error instead of freezing.
+      setTxStatus("Encrypting side and amount…");
+      const { encSide, encAmount, inputProof } = await Promise.race([
+        encryptSideAndAmount(fhevmInst, CONTRACT_ADDRESS, address, side, rawAmount),
+        new Promise<never>((_, rej) =>
+          setTimeout(() => rej(new Error("Encryption timed out — reload the page and retry")), 60_000)
+        ),
+      ]);
+
+      // Step 2: Approve USDC for the wrapper (wait for the allowance to mine).
       setTxStatus("Approving USDC for wrapping…");
-      await writeContractAsync({
+      await mine(await writeContractAsync({
         address: usdcAddress,
         abi: ERC20_ABI,
         functionName: "approve",
         args: [cusdcAddress, rawAmount],
-      });
+      }));
 
-      // Step 2: Wrap USDC → cUSDC (wrap mints the encrypted balance to `address`)
+      // Step 3: Wrap USDC → cUSDC (mints the encrypted balance; wait so placeBet sees it).
       setTxStatus("Wrapping USDC → cUSDC…");
-      await writeContractAsync({
+      await mine(await writeContractAsync({
         address: cusdcAddress,
         abi: CUSDC_ABI,
         functionName: "wrap",
         args: [address, rawAmount],
-      });
+      }));
 
-      // Step 2b: Authorize the auction as a cUSDC operator (idempotent — skip if already set).
+      // Step 4: Authorize the auction as a cUSDC operator (idempotent — skip if already set).
       // placeBet pulls via confidentialTransferFrom, which ERC-7984 permits only from operators.
       const alreadyOperator = await publicClient?.readContract({
         address: cusdcAddress,
@@ -98,25 +116,16 @@ export function usePlaceBetToken() {
       if (!alreadyOperator) {
         setTxStatus("Authorizing auction to settle your bid…");
         const until = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60; // 1 year (uint48 → number)
-        await writeContractAsync({
+        await mine(await writeContractAsync({
           address: cusdcAddress,
           abi: CUSDC_ABI,
           functionName: "setOperator",
           args: [CONTRACT_ADDRESS as `0x${string}`, until],
-        });
+        }));
       }
 
-      // Step 3: Encrypt side + amount in one proof batch
-      setTxStatus("Encrypting side and amount…");
-      const { encSide, encAmount, inputProof } = await encryptSideAndAmount(
-        fhevmInst,
-        CONTRACT_ADDRESS,
-        address,
-        side,
-        rawAmount
-      );
-
-      // Step 4: Place sealed bet (V2 token-only `placeBet`; callable repeatedly for top-ups)
+      // Step 5: Place the sealed bet, and WAIT for it to mine so the post-bet refetch reads the
+      // landed position/betCount (otherwise the UI looks like the bet never registered).
       setTxStatus("Submitting sealed bid…");
       const hash = await writeContractAsync({
         address: CONTRACT_ADDRESS,
@@ -124,8 +133,9 @@ export function usePlaceBetToken() {
         functionName: "placeBet",
         args: [BigInt(marketId), encSide, encAmount, inputProof],
       });
+      await mine(hash);
 
-      setTxStatus(`Token bid sealed: ${hash.slice(0, 10)}…`);
+      setTxStatus(`Bid sealed ✓ ${hash.slice(0, 10)}…`);
       return hash;
     } catch (e: unknown) {
       const msg = (e as { shortMessage?: string; message?: string })?.shortMessage
