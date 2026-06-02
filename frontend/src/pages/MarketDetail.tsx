@@ -196,7 +196,13 @@ function ActionPanel({
               </div>
             </div>
 
-            {/* Mechanisnm note */}
+            {/* Top-up form — add to the sealed position (YES, NO, or hedge both) */}
+            <BetPanel
+              marketId={market.id}
+              onSuccess={onSuccess}
+            />
+
+            {/* Mechanism note */}
             <div className="text-center py-3">
               <div className="font-mono text-[9px] text-ink-dim tracking-widest">
                 P_t^dir = ∅ for all t &lt; t_close
