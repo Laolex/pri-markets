@@ -6,7 +6,7 @@ import { ethers } from "hardhat";
 
 const AUCTION = process.env.CONTRACT_ADDRESS ?? "0x68D2E94D5A94C542ea0741A8F38a957A436df2c6";
 const ETH_FEED = "0x694AA1769357215DE4FAC081bf1f309aDC325306"; // ETH/USD Sepolia
-const EPOCH = 40 * 60; // 40 minutes
+const EPOCH = 3 * 60 * 60; // 3 hours — comfortable window for the live test
 const STRIKE = BigInt(Math.round(2000 * 1e8)); // $2,000 — low strike → very likely YES, easy resolve
 
 async function main() {
@@ -19,7 +19,7 @@ async function main() {
 
   const before = Number(await c.marketCount());
   const tx = await c.createMarketWithOracle(
-    "Will ETH close above $2,000 in 40 minutes? (live test)",
+    "Will ETH close above $2,000 in 3 hours? (live test)",
     BigInt(EPOCH), ETH_FEED, STRIKE,
   );
   const r = await tx.wait();
