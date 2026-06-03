@@ -47,9 +47,16 @@ function log(msg: string) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
 }
 
-// ── Oracle auto-resolution ────────────────────────────────────────────────────
+// ── Oracle auto-settlement (resolve → request reveal) ───────────────────────────
+//
+// Drives both autonomous steps for closed oracle markets:
+//   1. resolveByOracle — commit the outcome from Chainlink
+//   2. requestPoolReveal — makePubliclyDecryptable + emit PoolRevealRequested
+// The emitted event is then serviced by handlePoolReveal (publicDecrypt → onPoolRevealed),
+// after which bettors can claim. Both calls are idempotent (guarded by on-chain flags), so a
+// market already resolved/requested by the frontend or a prior run is simply skipped.
 
-async function resolveEligibleOracleMarkets(
+async function settleEligibleOracleMarkets(
   contract: ethers.Contract,
   oracleMarketIds: number[],
 ): Promise<void> {
@@ -58,19 +65,27 @@ async function resolveEligibleOracleMarkets(
 
   for (const id of oracleMarketIds) {
     try {
-      const m = await contract.getMarket(id);
-      if (m.resolved) continue;
-      if (Number(m.epochEnd) > now) continue;
+      let m = await contract.getMarket(id);
+      if (Number(m.epochEnd) > now) continue; // epoch still open
 
-      log(`market ${id}: epoch closed, triggering oracle resolution…`);
-      const tx = await withRetry(
-        () => contract.resolveByOracle(id),
-        `resolveByOracle market=${id}`,
-      );
-      await tx.wait();
-      log(`market ${id}: oracle resolved ✓ tx=${tx.hash}`);
+      // Step 1: resolve
+      if (!m.resolved) {
+        log(`market ${id}: epoch closed, resolving via oracle…`);
+        const tx = await withRetry(() => contract.resolveByOracle(id), `resolveByOracle market=${id}`);
+        await tx.wait();
+        m = await contract.getMarket(id);
+        log(`market ${id}: resolved ✓ outcome=${Number(m.outcome)} (0=NO,1=YES) tx=${tx.hash}`);
+      }
+
+      // Step 2: request pool reveal (handlePoolReveal finishes the decryption callback)
+      if (m.resolved && !m.poolRevealRequested) {
+        log(`market ${id}: requesting pool reveal…`);
+        const tx = await withRetry(() => contract.requestPoolReveal(id), `requestPoolReveal market=${id}`);
+        await tx.wait();
+        log(`market ${id}: pool reveal requested ✓ tx=${tx.hash}`);
+      }
     } catch (e) {
-      console.error(`[keeper] resolveByOracle failed market=${id}:`, (e as Error).message);
+      console.error(`[keeper] settle failed market=${id}:`, (e as Error).message);
     }
   }
 }
@@ -204,7 +219,7 @@ async function main() {
         lastBlock = to;
         saveState({ lastBlock, oracleMarketIds: [...oracleMarketIds] });
       }
-      await resolveEligibleOracleMarkets(contract, [...oracleMarketIds]);
+      await settleEligibleOracleMarkets(contract, [...oracleMarketIds]);
 
       // Refresh demo market slots on startup and every 6 hours
       const now = Math.floor(Date.now() / 1000);

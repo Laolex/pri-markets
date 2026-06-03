@@ -11,8 +11,9 @@ export const ABI = [
   // Market creation (demo refresh)
   "function createMarketWithOracle(string question, uint64 epochDuration, address priceFeed, int256 strikePrice) external returns (uint256)",
 
-  // Resolution
+  // Resolution + pool-reveal request (autonomous settlement)
   "function resolveByOracle(uint256 marketId) external",
+  "function requestPoolReveal(uint256 marketId) external",
 
   // Pool-reveal decryption callback (V2 settlement is single-step `claim` — no payout callback)
   "function onPoolRevealed(uint256 marketId, bytes32[] calldata handlesList, bytes calldata cleartexts, bytes calldata decryptionProof) external",
