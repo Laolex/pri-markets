@@ -9,7 +9,7 @@ import { refreshDemoMarkets } from "./refresh.js";
 const POLL_MS          = 30_000;        // 30 s between sweeps
 const REFRESH_INTERVAL = 6 * 60 * 60;  // 6 hours in seconds — how often to check demo slots
 const BLOCK_RANGE      = 10;            // Alchemy free tier max blocks per eth_getLogs request
-const DEPLOY_BLOCK     = 10_970_864;    // V2 deployment block — oracle backfill start
+const DEPLOY_BLOCK     = 10_981_135;    // V2 (fee+treasury) deployment block — oracle backfill start
 const FALLBACK_RPC     = "https://ethereum-sepolia-rpc.publicnode.com";
 
 function requireEnv(key: string): string {
@@ -84,6 +84,12 @@ async function settleEligibleOracleMarkets(
         await tx.wait();
         log(`market ${id}: pool reveal requested ✓ tx=${tx.hash}`);
       }
+
+      // Step 3: safety-net fee sweep for already-revealed markets whose reveal event was serviced
+      // before the sweep hook existed (handlePoolReveal's primary sweep covers fresh reveals).
+      if (m.poolRevealed) {
+        await sweepFeesIfPending(contract, BigInt(id));
+      }
     } catch (e) {
       console.error(`[keeper] settle failed market=${id}:`, (e as Error).message);
     }
@@ -114,6 +120,30 @@ async function handlePoolReveal(contract: ethers.Contract, ev: ethers.EventLog) 
   );
   await tx.wait();
   log(`market ${marketId}: pool revealed ✓ tx=${tx.hash}`);
+
+  // Once pools are revealed the protocol fee (and any no-winner pot) is computable on-chain.
+  // Sweep it into the treasury. Permissionless + idempotent (guarded by feesSwept), so a retry
+  // or a prior manual sweep just no-ops.
+  await sweepFeesIfPending(contract, marketId);
+}
+
+// ── Treasury fee sweep ──────────────────────────────────────────────────────────
+//
+// Collects the 2% protocol fee — or, when a market had no winning bettors, the entire pot —
+// into the treasury address set in the contract. Safe to call repeatedly: getFeeInfo.feesSwept
+// gates the on-chain transfer, so this skips already-swept markets.
+
+async function sweepFeesIfPending(contract: ethers.Contract, marketId: bigint): Promise<void> {
+  try {
+    const info = await contract.getFeeInfo(marketId);
+    if (info.feesSwept) return;
+    log(`market ${marketId}: sweeping fees → treasury…`);
+    const tx = await withRetry(() => contract.sweepFees(marketId), `sweepFees market=${marketId}`);
+    await tx.wait();
+    log(`market ${marketId}: fees swept ✓ tx=${tx.hash}`);
+  } catch (e) {
+    console.error(`[keeper] sweepFees failed market=${marketId}:`, (e as Error).message);
+  }
 }
 
 // V2 note: settlement is a single-step `claim()` computed entirely in the coprocessor —

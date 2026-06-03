@@ -124,6 +124,9 @@ export function BetPanel({ marketId, onSuccess }: BetPanelProps) {
         <p className="font-mono text-[10px] text-ink-dim mt-1.5">
           Amount is encrypted. First bid: approve → wrap → authorize → seal (4 txns); top-ups skip authorize.
         </p>
+        <p className="font-mono text-[10px] text-gold/70 mt-1">
+          A 2% protocol fee is taken from the total pot at settlement — winners split the remaining 98%.
+        </p>
 
         {/* Test USDC faucet — USDCMock has an open mint() on Sepolia */}
         <div className="flex items-center justify-between gap-2 mt-2 px-3 py-2 border border-wire bg-black/20">

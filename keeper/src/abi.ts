@@ -17,7 +17,11 @@ export const ABI = [
 
   // Pool-reveal decryption callback (V2 settlement is single-step `claim` — no payout callback)
   "function onPoolRevealed(uint256 marketId, bytes32[] calldata handlesList, bytes calldata cleartexts, bytes calldata decryptionProof) external",
+
+  // Treasury sweep — permissionless; collects the 2% fee (or the full no-winner pot) into treasury
+  "function sweepFees(uint256 marketId) external",
+  "function getFeeInfo(uint256 marketId) external view returns (uint16 feeBps, uint256 feeAmount, uint256 distributable, bool feesSwept)",
 ] as const;
 
-// ConfidentialBatchAuction V2 (token-only) — Sepolia, deployed 2026-06-02
-export const CONTRACT_ADDRESS = "0x68D2E94D5A94C542ea0741A8F38a957A436df2c6";
+// ConfidentialBatchAuction V2 (token-only, fee+treasury) — Sepolia, deployed 2026-06-03
+export const CONTRACT_ADDRESS = "0xF00573FbBE32264ac14442BDC39512845D0d41C1";

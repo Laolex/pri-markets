@@ -1,4 +1,5 @@
 import { useClaimToken } from "@/hooks/useClaimToken";
+import { useRevealPayout } from "@/hooks/useRevealPayout";
 import { Spinner } from "@/components/ui/Spinner";
 import type { PositionView } from "@/types";
 
@@ -9,18 +10,44 @@ interface ClaimPanelProps {
   onSuccess?:   () => void;
 }
 
-function SettledBadge() {
+function SettledBadge({ marketId }: { marketId: number }) {
+  const { revealPayout, payout, isPending, error } = useRevealPayout(marketId);
+
   return (
-    <div className="flex items-center gap-3 p-4 border border-teal/30 bg-teal-faint">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M3 8l4 4 6-6" stroke="#2EC4B6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <div>
-        <div className="font-mono text-[11px] text-teal tracking-wider">SETTLEMENT COMPLETE</div>
-        <div className="font-body text-[12px] text-ink-secondary mt-0.5">
-          Your directional choice was never revealed on-chain.
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 p-4 border border-teal/30 bg-teal-faint">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M3 8l4 4 6-6" stroke="#2EC4B6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <div>
+          <div className="font-mono text-[11px] text-teal tracking-wider">SETTLEMENT COMPLETE</div>
+          <div className="font-body text-[12px] text-ink-secondary mt-0.5">
+            Your directional choice was never revealed on-chain.
+          </div>
         </div>
       </div>
+
+      {payout === null ? (
+        <button
+          onClick={() => { void revealPayout(); }}
+          disabled={isPending}
+          className="btn-ghost flex items-center gap-2 text-[12px]"
+        >
+          {isPending ? <><Spinner size={12} /><span>DECRYPTING…</span></> : <span>⬡ REVEAL MY PAYOUT (private)</span>}
+        </button>
+      ) : payout === "0" ? (
+        <div className="px-4 py-3 border border-ink-faint/20 bg-ink-faint/5 font-mono text-[11px] text-ink-secondary">
+          No payout — this position was on the losing side.
+        </div>
+      ) : (
+        <div className="px-4 py-3 border border-gold/30 bg-gold-faint font-mono text-[12px] text-gold">
+          You won <span className="font-bold">{payout} cUSDC</span>
+          <div className="text-[9px] text-ink-secondary mt-1">
+            Decrypted client-side via relayer userDecrypt — visible only to you.
+          </div>
+        </div>
+      )}
+      {error && <p className="font-mono text-[11px] text-crimson">{error}</p>}
     </div>
   );
 }
@@ -29,7 +56,7 @@ export function ClaimPanel({ marketId, position, poolRevealed, onSuccess }: Clai
   const { claimToken, isPending, error } = useClaimToken(marketId);
 
   if (!poolRevealed) return null;
-  if (position.claimed) return <SettledBadge />;
+  if (position.claimed) return <SettledBadge marketId={marketId} />;
 
   return (
     <div className="space-y-3">
