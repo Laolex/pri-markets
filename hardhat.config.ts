@@ -1,7 +1,7 @@
 import { HardhatUserConfig, vars } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@fhevm/hardhat-plugin";
-import "@fhe-profiler/hardhat-plugin";
+import "hardhat-fhe-profiler";
 
 const PRIVATE_KEY = vars.get("PRIVATE_KEY", "0x0000000000000000000000000000000000000000000000000000000000000001");
 const SEPOLIA_RPC_URL = vars.get("SEPOLIA_RPC_URL", "https://ethereum-sepolia-rpc.publicnode.com");
