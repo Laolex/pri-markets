@@ -1,0 +1,32 @@
+name: HCU cost gate
+
+# Confidential contracts have a second, invisible budget: per-transaction HCU
+# (Homomorphic Complexity Units), the off-chain coprocessor compute cap that no
+# block explorer or hardhat-gas-reporter measures. This gate profiles every FHE
+# function and fails the build on an HCU regression beyond the baseline, or on a
+# newly unanalyzable operation. Baseline: .fhe-profile-baseline.json
+# Tool: fhe-gas-profiler (github.com/Laolex/fhe-gas-profiler), vendored in /vendor.
+
+on:
+  pull_request:
+    paths:
+      - "contracts/**"
+      - ".fhe-profile-baseline.json"
+      - "hardhat.config.ts"
+  push:
+    branches: [main]
+    paths:
+      - "contracts/**"
+
+jobs:
+  hcu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Profile HCU and gate on regressions
+        run: npm run profile:ci
