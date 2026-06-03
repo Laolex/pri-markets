@@ -2,10 +2,10 @@ import { useReadContract } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { createPublicClient, http } from "viem";
 import { sepolia } from "wagmi/chains";
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from "@/lib/contracts/config";
+import { CONTRACT_ADDRESS, CONTRACT_ABI, SEPOLIA_RPC } from "@/lib/contracts/config";
 import { type MarketView, computeEpochStatus } from "@/types";
 
-const publicClient = createPublicClient({ chain: sepolia, transport: http() });
+const publicClient = createPublicClient({ chain: sepolia, transport: http(SEPOLIA_RPC) });
 
 function parseMarket(id: number, raw: readonly unknown[]): MarketView {
   const [
