@@ -36,12 +36,9 @@ interface DemoSlot {
 }
 
 const DEMO_SLOTS: DemoSlot[] = [
-  // ── 2-week markets ───────────────────────────────────────────────────────────
-  { question: "Will ETH close above $2,500 at epoch end?",    feed: FEEDS.ETH,  strike: toFeedUnits(2500),   duration: TWO_WEEKS },
-  { question: "Will ETH close above $3,500 at epoch end?",    feed: FEEDS.ETH,  strike: toFeedUnits(3500),   duration: TWO_WEEKS },
-  { question: "Will BTC close above $90,000 at epoch end?",   feed: FEEDS.BTC,  strike: toFeedUnits(90000),  duration: TWO_WEEKS },
-  { question: "Will BTC close above $110,000 at epoch end?",  feed: FEEDS.BTC,  strike: toFeedUnits(110000), duration: TWO_WEEKS },
-  { question: "Will LINK close above $15 at epoch end?",      feed: FEEDS.LINK, strike: toFeedUnits(15),     duration: TWO_WEEKS },
+  // ── 1-week markets ───────────────────────────────────────────────────────────
+  { question: "Will ETH close above $2,500 at epoch end?",    feed: FEEDS.ETH,  strike: toFeedUnits(2500),   duration: WEEK },
+  { question: "Will BTC close above $90,000 at epoch end?",   feed: FEEDS.BTC,  strike: toFeedUnits(90000),  duration: WEEK },
 
   // ── Daily markets ────────────────────────────────────────────────────────────
   { question: "Will ETH close above $2,600 in 24 hours?",     feed: FEEDS.ETH,  strike: toFeedUnits(2600),   duration: DAY },
