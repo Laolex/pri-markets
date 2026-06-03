@@ -11,17 +11,22 @@ async function main() {
     throw new Error("Insufficient balance for deployment — fund the deployer first");
   }
 
+  // Treasury receives the protocol fee + no-winner pots. Falls back to the deployer if unset
+  // (constructor also treats address(0) as "use deployer"). Set TREASURY_ADDRESS to route elsewhere.
+  const treasury = process.env.TREASURY_ADDRESS ?? ethers.ZeroAddress;
+  console.log("Treasury:", treasury === ethers.ZeroAddress ? `${deployer.address} (deployer fallback)` : treasury);
+
   console.log("\nDeploying ConfidentialBatchAuction...");
   const Factory = await ethers.getContractFactory("ConfidentialBatchAuction");
 
-  const deployTx = await Factory.getDeployTransaction();
+  const deployTx = await Factory.getDeployTransaction(treasury);
   const gasEstimate = await ethers.provider.estimateGas(deployTx);
   const feeData = await ethers.provider.getFeeData();
   const gasCost = gasEstimate * (feeData.gasPrice ?? 0n);
   console.log("Deploy gas estimate:", gasEstimate.toString());
   console.log("Estimated cost:", ethers.formatEther(gasCost), "ETH");
 
-  const contract = await Factory.deploy();
+  const contract = await Factory.deploy(treasury);
   await contract.waitForDeployment();
   const addr = await contract.getAddress();
 
@@ -41,7 +46,7 @@ async function main() {
     console.log("\nWaiting 30s for Etherscan indexing...");
     await new Promise((r) => setTimeout(r, 30_000));
     try {
-      await run("verify:verify", { address: addr, constructorArguments: [] });
+      await run("verify:verify", { address: addr, constructorArguments: [treasury] });
       console.log("Etherscan verification submitted");
     } catch (err: any) {
       const msg = String(err?.message ?? err);

@@ -75,7 +75,8 @@ describe("ConfidentialBatchAuction V2 — token-only, sub-pools, top-ups", funct
   });
 
   /** Deploy a harness whose _tokenAddress() points at a fresh mock cUSDC. */
-  async function deployHarness(): Promise<{ harness: any; mockToken: any }> {
+  // feeBps defaults to 0 so existing payout assertions are exact; fee tests pass 200.
+  async function deployHarness(feeBps = 0): Promise<{ harness: any; mockToken: any }> {
     const MockFactory = await ethers.getContractFactory("MockConfidentialUSDC");
     const mockToken   = await MockFactory.deploy();
     await mockToken.waitForDeployment();
@@ -83,6 +84,7 @@ describe("ConfidentialBatchAuction V2 — token-only, sub-pools, top-ups", funct
     const HarnessFactory = await ethers.getContractFactory("CBATokenTestHarness");
     const harness        = await HarnessFactory.deploy(await mockToken.getAddress());
     await harness.waitForDeployment();
+    if (feeBps !== 200) await harness.connect(owner).setProtocolFee(feeBps); // constructor default is 200
     return { harness, mockToken };
   }
 
@@ -344,5 +346,116 @@ describe("ConfidentialBatchAuction V2 — token-only, sub-pools, top-ups", funct
     expect((await harness.getPosition(marketId, alice.address)).claimed).to.be.true;
     expect((await harness.getPosition(marketId, carol.address)).claimed).to.be.true;
     expect((await harness.getPosition(marketId, bob.address)).claimed).to.be.true;
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Protocol fee + treasury sweep + payout visibility
+  // ──────────────────────────────────────────────────────────────────────────
+
+  async function decryptHandle(handle: string): Promise<bigint> {
+    if (handle === ethers.ZeroHash) return 0n;
+    const res = await mockPublicDecrypt([handle]);
+    const [v] = ethers.AbiCoder.defaultAbiCoder().decode(["uint64"], res.abiEncodedClearValues);
+    return v as bigint;
+  }
+
+  it("fee: winner payout is reduced by the protocol fee; getFeeInfo is correct", async function () {
+    const { harness, mockToken } = await deployHarness(200); // 2%
+    const marketId = await createMarket(harness, 60);
+    await mockToken.depositFor(alice.address, TEN_USDC);
+    await mockToken.depositFor(bob.address,   TEN_USDC);
+    await placeBetFor(alice, harness, marketId, SIDE_YES, TEN_USDC);
+    await placeBetFor(bob,   harness, marketId, SIDE_NO,  TEN_USDC);
+    await closeEpoch();
+    await harness.connect(owner).resolveMarket(marketId, SIDE_YES);
+    await doPoolReveal(harness, marketId);
+
+    const fi = await harness.getFeeInfo(marketId);
+    expect(fi.feeBps).to.equal(200);
+    expect(fi.feeAmount).to.equal(400_000n);        // 2% of 20 USDC
+    expect(fi.distributable).to.equal(19_600_000n); // 19.6 USDC
+    expect(fi.feesSwept).to.be.false;
+
+    // alice wins the whole YES pool: 10 * 19.6 / 10 = 19.6 USDC (was 20 before fee)
+    expect(await doClaim(harness, mockToken, marketId, alice)).to.equal(19_600_000n);
+  });
+
+  it("sweepFees: treasury receives exactly the protocol fee after settlement; idempotent", async function () {
+    const { harness, mockToken } = await deployHarness(200);
+    await harness.connect(owner).setTreasury(carol.address); // isolate the treasury balance
+    const marketId = await createMarket(harness, 60);
+    await mockToken.depositFor(alice.address, TEN_USDC);
+    await mockToken.depositFor(bob.address,   TEN_USDC);
+    await placeBetFor(alice, harness, marketId, SIDE_YES, TEN_USDC);
+    await placeBetFor(bob,   harness, marketId, SIDE_NO,  TEN_USDC);
+    await closeEpoch();
+    await harness.connect(owner).resolveMarket(marketId, SIDE_YES);
+    await doPoolReveal(harness, marketId);
+    await doClaim(harness, mockToken, marketId, alice); // winner takes 19.6, leaving the 0.4 fee
+
+    await expect(harness.connect(bob).sweepFees(marketId))
+      .to.emit(harness, "FeesSwept").withArgs(marketId, carol.address, 400_000n, false);
+    expect(await decryptHandle(await mockToken.lastReceivedHandle(carol.address))).to.equal(400_000n);
+
+    expect((await harness.getFeeInfo(marketId)).feesSwept).to.be.true;
+    await expect(harness.sweepFees(marketId)).to.be.revertedWith("Already swept");
+  });
+
+  it("sweepFees: no winners → the entire stranded pot goes to treasury", async function () {
+    const { harness, mockToken } = await deployHarness(200);
+    await harness.connect(owner).setTreasury(carol.address);
+    const marketId = await createMarket(harness, 60);
+    await mockToken.depositFor(alice.address, TEN_USDC);
+    await mockToken.depositFor(bob.address,   TEN_USDC);
+    await placeBetFor(alice, harness, marketId, SIDE_YES, TEN_USDC);
+    await placeBetFor(bob,   harness, marketId, SIDE_YES, TEN_USDC); // both YES
+    await closeEpoch();
+    await harness.connect(owner).resolveMarket(marketId, SIDE_NO);  // NO wins → noPool = 0, no winners
+    await doPoolReveal(harness, marketId);
+
+    expect(await doClaim(harness, mockToken, marketId, alice)).to.equal(0n); // loser claims 0
+
+    await expect(harness.connect(alice).sweepFees(marketId))
+      .to.emit(harness, "FeesSwept").withArgs(marketId, carol.address, 20_000_000n, true);
+    expect(await decryptHandle(await mockToken.lastReceivedHandle(carol.address))).to.equal(20_000_000n);
+  });
+
+  it("payout visibility: claimer can decrypt their own payout via getEncPayout", async function () {
+    const { harness, mockToken } = await deployHarness(200);
+    const marketId = await createMarket(harness, 60);
+    await mockToken.depositFor(alice.address, TEN_USDC);
+    await mockToken.depositFor(bob.address,   TEN_USDC);
+    await placeBetFor(alice, harness, marketId, SIDE_YES, TEN_USDC);
+    await placeBetFor(bob,   harness, marketId, SIDE_NO,  TEN_USDC);
+    await closeEpoch();
+    await harness.connect(owner).resolveMarket(marketId, SIDE_YES);
+    await doPoolReveal(harness, marketId);
+    await harness.connect(alice).claim(marketId);
+
+    // getEncPayout returns the same handle that was paid out — the UI decrypts it as "you won X"
+    const payoutHandle = await harness.getEncPayout(marketId, alice.address);
+    expect(payoutHandle).to.equal(await mockToken.lastReceivedHandle(alice.address));
+    expect(await decryptHandle(payoutHandle)).to.equal(19_600_000n); // 19.6 USDC after 2% fee
+  });
+
+  it("admin: setProtocolFee/setTreasury are owner-gated and bounded", async function () {
+    const { harness } = await deployHarness(200);
+    await expect(harness.connect(alice).setProtocolFee(100))
+      .to.be.revertedWithCustomError(harness, "OwnableUnauthorizedAccount");
+    await expect(harness.connect(owner).setProtocolFee(1001)).to.be.revertedWith("Fee too high");
+    await harness.connect(owner).setProtocolFee(100);
+    expect(await harness.protocolFeeBps()).to.equal(100);
+
+    await expect(harness.connect(alice).setTreasury(alice.address))
+      .to.be.revertedWithCustomError(harness, "OwnableUnauthorizedAccount");
+    await expect(harness.connect(owner).setTreasury(ethers.ZeroAddress)).to.be.revertedWith("Zero treasury");
+    await harness.connect(owner).setTreasury(carol.address);
+    expect(await harness.treasury()).to.equal(carol.address);
+  });
+
+  it("sweepFees reverts before reveal", async function () {
+    const { harness } = await deployHarness(200);
+    const marketId = await createMarket(harness, 60);
+    await expect(harness.sweepFees(marketId)).to.be.revertedWith("Pool not revealed");
   });
 });

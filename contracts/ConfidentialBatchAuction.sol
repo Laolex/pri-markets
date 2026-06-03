@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {FHE, euint8, euint64, ebool, externalEuint8, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface AggregatorV3Interface {
     function latestRoundData() external view returns (
@@ -35,7 +36,7 @@ interface IConfidentialUSDC {
 ///             repeated betting are first-class. The one-bet-per-address cap is gone.
 ///           • Settlement reads the winning sub-pool directly — no FHE.eq/FHE.select on the side
 ///             (a losing-only bettor's winning stake is already 0), which also lowers claim HCU.
-contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
+contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard, Ownable {
     // ── Constants ──────────────────────────────────────────────────────────
     uint8   public constant SIDE_NO    = 0;
     uint8   public constant SIDE_YES   = 1;
@@ -44,9 +45,33 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
     // Official Zama cUSDC (Mock) on Sepolia — ERC7984ERC20Wrapper wrapping USDC.
     address public constant CUSDC_TOKEN = 0x7c5BF43B851c1dff1a4feE8dB225b87f2C223639;
 
+    // ── Protocol economics ───────────────────────────────────────────────────
+    uint16  public constant MAX_FEE_BPS = 1000;   // hard cap: 10%
+    uint16  public protocolFeeBps;                // fee on each market's pool, in basis points
+    address public treasury;                      // receives protocol fees + no-winner pots
+
     /// @dev Token address for markets. Virtual so the test harness can inject a mock.
     function _tokenAddress() internal view virtual returns (address) {
         return CUSDC_TOKEN;
+    }
+
+    /// @param treasury_ fee recipient; falls back to the deployer if zero.
+    constructor(address treasury_) Ownable(msg.sender) {
+        treasury       = treasury_ == address(0) ? msg.sender : treasury_;
+        protocolFeeBps = 200; // 2% default — owner-adjustable up to MAX_FEE_BPS
+    }
+
+    // ── Admin (owner) ──────────────────────────────────────────────────────────
+    function setProtocolFee(uint16 bps) external onlyOwner {
+        require(bps <= MAX_FEE_BPS, "Fee too high");
+        protocolFeeBps = bps;
+        emit ProtocolFeeUpdated(bps);
+    }
+
+    function setTreasury(address t) external onlyOwner {
+        require(t != address(0), "Zero treasury");
+        treasury = t;
+        emit TreasuryUpdated(t);
     }
 
     // ── Data structures ────────────────────────────────────────────────────
@@ -71,6 +96,10 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
         address token;                // ERC-7984 token address
         uint256 betCount;             // total bids placed (counts top-ups)
         uint256 bettorCount;          // unique addresses
+        // Fee accounting (plaintext, set at reveal)
+        uint256 feeAmount;            // protocol fee skimmed from the pool
+        uint256 distributable;        // totalPool − feeAmount; what winners split
+        bool    feesSwept;            // treasury sweep done
     }
 
     /// @dev Per-position encrypted sub-pools. The side is never stored in plaintext; bets are routed
@@ -81,6 +110,7 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
         euint64 yesStake;
         euint64 noStake;
         bool    claimed;
+        euint64 payout;     // encrypted payout, set at claim; claimer-decryptable
     }
 
     // ── State ──────────────────────────────────────────────────────────────
@@ -96,6 +126,9 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
     event PoolRevealRequested(uint256 indexed marketId, bytes32[2] handles);
     event PoolRevealed(uint256 indexed marketId, uint256 yesPool, uint256 noPool, uint256 clearingPrice);
     event PayoutClaimed(uint256 indexed marketId, address indexed bettor);
+    event FeesSwept(uint256 indexed marketId, address indexed treasury, uint256 amount, bool noWinners);
+    event ProtocolFeeUpdated(uint16 bps);
+    event TreasuryUpdated(address treasury);
 
     // ── Market lifecycle ─────────────────────────────────────────────────────
     function createMarket(
@@ -291,6 +324,12 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
 
         uint256 totalPool = m.revealedYesPool + m.revealedNoPool;
         m.clearingPrice   = totalPool > 0 ? (m.revealedYesPool * 10000) / totalPool : 0;
+
+        // Skim the protocol fee now that pools are plaintext. Winners split `distributable`;
+        // the fee (and, when there are no winners, the whole pot) is later swept to the treasury.
+        m.feeAmount     = (totalPool * protocolFeeBps) / 10000;
+        m.distributable = totalPool - m.feeAmount;
+
         m.poolRevealed    = true;
 
         emit PoolRevealed(marketId, m.revealedYesPool, m.revealedNoPool, m.clearingPrice);
@@ -298,9 +337,11 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
 
     // ── Settlement (single-step, no KMS callback) ─────────────────────────────
     /// @notice Claim cUSDC payout in one tx. Payout is computed entirely in the coprocessor:
-    ///           payout = winningStake * totalPool / winPool
-    ///         using the caller's encrypted winning sub-pool — never revealing side or amount.
-    ///         A bettor with no winning stake claims 0 (the encrypted stake is already 0).
+    ///           payout = winningStake * distributable / winPool
+    ///         where `distributable` is the pool after the protocol fee. Never reveals side or
+    ///         amount. A bettor with no winning stake claims 0 (the encrypted stake is already 0).
+    ///         The encrypted payout is stored and made decryptable by the claimer, so the UI can
+    ///         show them exactly how much they won — without anyone else seeing it.
     function claim(uint256 marketId) external nonReentrant {
         require(marketId < markets.length, "Bad market");
         Market storage m = markets[marketId];
@@ -310,25 +351,57 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
         require(pos.exists, "No position");
         require(!pos.claimed, "Already claimed");
 
-        uint256 winPool   = m.outcome == SIDE_YES ? m.revealedYesPool : m.revealedNoPool;
-        uint256 totalPool = m.revealedYesPool + m.revealedNoPool;
-        require(totalPool <= type(uint64).max, "Pool overflow");
-        require(winPool   <= type(uint64).max, "Pool overflow");
+        uint256 winPool = m.outcome == SIDE_YES ? m.revealedYesPool : m.revealedNoPool;
+        require(winPool <= type(uint64).max, "Pool overflow");
 
         // The caller's stake on the winning side (encrypted). Losing-only bettors have 0 here.
         euint64 winStake = m.outcome == SIDE_YES ? pos.yesStake : pos.noStake;
 
-        euint64 numerator  = FHE.mul(winStake, uint64(totalPool));
+        // Winners split the after-fee pool. winPool == 0 (no winners) → payout 0; the whole pot
+        // is swept to the treasury via sweepFees instead.
+        euint64 numerator  = FHE.mul(winStake, uint64(m.distributable));
         euint64 encPayout  = winPool > 0
             ? FHE.div(numerator, uint64(winPool))
             : FHE.asEuint64(0);
 
         pos.claimed = true;
 
+        // Persist + authorize the claimer to decrypt their own payout ("you won X cUSDC").
+        FHE.allowThis(encPayout);
+        FHE.allow(encPayout, msg.sender);
+        pos.payout = encPayout;
+
         FHE.allowTransient(encPayout, m.token);
         IConfidentialUSDC(m.token).confidentialTransfer(msg.sender, encPayout);
 
         emit PayoutClaimed(marketId, msg.sender);
+    }
+
+    /// @notice Sweep the protocol fee (and, when there are no winners, the entire stranded pot)
+    ///         to the treasury. Permissionless — funds always go to `treasury`. Idempotent.
+    function sweepFees(uint256 marketId) external nonReentrant {
+        require(marketId < markets.length, "Bad market");
+        Market storage m = markets[marketId];
+        require(m.poolRevealed, "Pool not revealed");
+        require(!m.feesSwept, "Already swept");
+
+        uint256 winPool   = m.outcome == SIDE_YES ? m.revealedYesPool : m.revealedNoPool;
+        uint256 totalPool = m.revealedYesPool + m.revealedNoPool;
+        require(totalPool <= type(uint64).max, "Pool overflow");
+
+        // Winners claim `distributable`, leaving exactly `feeAmount`. With no winners nobody can
+        // claim, so the whole pot is the sweep.
+        bool    noWinners   = winPool == 0;
+        uint256 sweepAmount = noWinners ? totalPool : m.feeAmount;
+
+        m.feesSwept = true;
+        if (sweepAmount > 0) {
+            euint64 encSweep = FHE.asEuint64(uint64(sweepAmount));
+            FHE.allowTransient(encSweep, m.token);
+            IConfidentialUSDC(m.token).confidentialTransfer(treasury, encSweep);
+        }
+
+        emit FeesSwept(marketId, treasury, sweepAmount, noWinners);
     }
 
     // ── Views ─────────────────────────────────────────────────────────────────
@@ -388,5 +461,21 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
         require(marketId < markets.length, "Bad market");
         Market storage m = markets[marketId];
         return (m.yesPool, m.noPool);
+    }
+
+    /// @notice The claimer's encrypted payout handle (set at claim). Only the claimer has ACL to
+    ///         decrypt it via the relayer — the UI uses this to show "you won X cUSDC".
+    function getEncPayout(uint256 marketId, address bettor) external view returns (euint64 payout) {
+        return positions[marketId][bettor].payout;
+    }
+
+    /// @notice Plaintext fee accounting for a revealed market.
+    function getFeeInfo(uint256 marketId)
+        external view
+        returns (uint16 feeBps, uint256 feeAmount, uint256 distributable, bool feesSwept)
+    {
+        require(marketId < markets.length, "Bad market");
+        Market storage m = markets[marketId];
+        return (protocolFeeBps, m.feeAmount, m.distributable, m.feesSwept);
     }
 }
