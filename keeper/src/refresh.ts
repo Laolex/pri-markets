@@ -14,7 +14,6 @@ import { ethers } from "ethers";
 const FOUR_HOURS = 60 * 60 * 4;
 const DAY        = 60 * 60 * 24;
 const WEEK       = 60 * 60 * 24 * 7;
-const TWO_WEEKS  = WEEK * 2;
 
 // Chainlink feeds on Sepolia (8 decimal USD)
 const FEEDS = {

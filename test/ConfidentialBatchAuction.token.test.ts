@@ -28,9 +28,9 @@ async function encryptBet(contractAddress: string, signerAddress: string, side: 
     .add64(amountRaw)
     .encrypt();
   return {
-    encSide:    enc.handles[0] as `0x${string}`,
-    encAmount:  enc.handles[1] as `0x${string}`,
-    inputProof: enc.inputProof as `0x${string}`,
+    encSide:    ethers.hexlify(enc.handles[0]) as `0x${string}`,
+    encAmount:  ethers.hexlify(enc.handles[1]) as `0x${string}`,
+    inputProof: ethers.hexlify(enc.inputProof) as `0x${string}`,
   };
 }
 
@@ -82,7 +82,7 @@ describe("ConfidentialBatchAuction V2 — token-only, sub-pools, top-ups", funct
     await mockToken.waitForDeployment();
 
     const HarnessFactory = await ethers.getContractFactory("CBATokenTestHarness");
-    const harness        = await HarnessFactory.deploy(await mockToken.getAddress());
+    const harness: any   = await HarnessFactory.deploy(await mockToken.getAddress());
     await harness.waitForDeployment();
     if (feeBps !== 200) await harness.connect(owner).setProtocolFee(feeBps); // constructor default is 200
     return { harness, mockToken };
