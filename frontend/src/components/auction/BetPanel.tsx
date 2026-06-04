@@ -1,16 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { motion } from "framer-motion";
-import { usePlaceBet } from "@/hooks/usePlaceBet";
 import { usePlaceBetToken } from "@/hooks/usePlaceBetToken";
+import { useMintUsdc } from "@/hooks/useMintUsdc";
+import { usePosition } from "@/hooks/useMarkets";
 import { useAppStore } from "@/store/appStore";
 import { Spinner } from "@/components/ui/Spinner";
 import { SIDE_YES, SIDE_NO, CUSDC_TOKEN, USDC_TOKEN } from "@/types";
 
 interface BetPanelProps {
-  marketId:       number;
-  isTokenMarket?: boolean;
-  onSuccess?:     () => void;
+  marketId:   number;
+  onSuccess?: () => void;
 }
 
 function SideSelector({ side, onChange, disabled }: {
@@ -49,71 +49,32 @@ function SideSelector({ side, onChange, disabled }: {
   );
 }
 
-// ── ETH bet panel ──────────────────────────────────────────────────────────
+// ── cUSDC bet panel (token-only V2; supports top-ups) ──────────────────────
 
-function EthBetPanel({ marketId, onSuccess }: { marketId: number; onSuccess?: () => void }) {
-  const { fheStatus } = useAppStore();
-  const { placeBet, isPending } = usePlaceBet();
-  const [side, setSide]     = useState<number>(SIDE_YES);
-  const [amount, setAmount] = useState("0.01");
-  const fheReady = fheStatus === "ready";
-
-  async function handleSubmit() {
-    await placeBet(marketId, side, amount);
-    onSuccess?.();
-  }
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-      <SideSelector side={side} onChange={setSide} disabled={isPending} />
-
-      <div>
-        <div className="data-label mb-2">CAPITAL COMMITMENT (ETH)</div>
-        <div className="relative">
-          <input
-            type="number" step="0.001" min="0.001"
-            value={amount} onChange={(e) => setAmount(e.target.value)}
-            disabled={isPending} className="intel-input pr-12" placeholder="0.01"
-          />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-ink-dim">ETH</span>
-        </div>
-        <p className="font-mono text-[10px] text-ink-dim mt-1.5">
-          Side is encrypted. Only commitment amount is public.
-        </p>
-      </div>
-
-      <button
-        onClick={handleSubmit}
-        disabled={isPending || !fheReady}
-        className="btn-gold w-full flex items-center justify-center gap-3"
-      >
-        {isPending ? (
-          <><Spinner size={14} /><span>ENCRYPTING + SUBMITTING</span></>
-        ) : (
-          <><span className="text-[15px]">⬡</span><span>SEAL & SUBMIT BID</span></>
-        )}
-      </button>
-
-      {!fheReady && (
-        <div className="flex items-center gap-2 py-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-gold-dim animate-pulse-gold" />
-          <span className="font-mono text-[10px] text-ink-dim">
-            {fheStatus === "initializing" ? "INITIALIZING FHE RELAYER…" : "FHE OFFLINE — CONNECT WALLET"}
-          </span>
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-// ── cUSDC token bet panel ─────────────────────────────────────────────────
-
-function TokenBetPanel({ marketId, onSuccess }: { marketId: number; onSuccess?: () => void }) {
+export function BetPanel({ marketId, onSuccess }: BetPanelProps) {
+  const { isConnected, address } = useAccount();
   const { fheStatus } = useAppStore();
   const { placeBetToken, isPending, error } = usePlaceBetToken();
+  const { mintUsdc, refreshBalance, balance, isPending: minting, faucetAmount } = useMintUsdc();
+  const { data: position } = usePosition(marketId, address);
   const [side, setSide]     = useState<number>(SIDE_YES);
   const [amount, setAmount] = useState("1");
   const fheReady = fheStatus === "ready";
+  const hasPosition = !!position?.exists;
+  const lowBalance = balance !== null && Number(balance) < Number(amount || "0");
+
+  useEffect(() => {
+    if (isConnected && address) void refreshBalance();
+  }, [isConnected, address, refreshBalance]);
+
+  if (!isConnected) {
+    return (
+      <div className="py-6 text-center">
+        <div className="font-mono text-[10px] tracking-widest text-ink-dim mb-2">AUTHENTICATION REQUIRED</div>
+        <p className="font-body text-ink-secondary text-[14px]">Connect wallet to place a sealed bid.</p>
+      </div>
+    );
+  }
 
   async function handleSubmit() {
     await placeBetToken(
@@ -137,6 +98,17 @@ function TokenBetPanel({ marketId, onSuccess }: { marketId: number; onSuccess?: 
         </div>
       </div>
 
+      {/* Top-up affordance — you already hold a sealed position in this market */}
+      {hasPosition && (
+        <div className="flex items-center gap-2 px-3 py-2 border border-gold-dim/40 bg-gold/5">
+          <span className="w-1.5 h-1.5 rounded-full bg-gold flex-shrink-0" />
+          <p className="font-mono text-[9px] text-ink-dim">
+            You already hold a sealed stake here. This bid <span className="text-gold">adds to your position</span> —
+            stakes accumulate in your encrypted YES/NO sub-pools, and you may bet either side.
+          </p>
+        </div>
+      )}
+
       <SideSelector side={side} onChange={setSide} disabled={isPending} />
 
       <div>
@@ -150,8 +122,28 @@ function TokenBetPanel({ marketId, onSuccess }: { marketId: number; onSuccess?: 
           <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-ink-dim">USDC</span>
         </div>
         <p className="font-mono text-[10px] text-ink-dim mt-1.5">
-          Amount is encrypted. Three transactions: USDC approve → wrap → sealed bid.
+          Amount is encrypted. First bid: approve → wrap → authorize → seal (4 txns); top-ups skip authorize.
         </p>
+        <p className="font-mono text-[10px] text-gold/70 mt-1">
+          A 2% protocol fee is taken from the total pot at settlement — winners split the remaining 98%.
+        </p>
+
+        {/* Test USDC faucet — USDCMock has an open mint() on Sepolia */}
+        <div className="flex items-center justify-between gap-2 mt-2 px-3 py-2 border border-wire bg-black/20">
+          <span className="font-mono text-[10px] text-ink-dim">
+            Test balance:{" "}
+            <span className={lowBalance ? "text-crimson" : "text-ink-secondary"}>
+              {balance === null ? "…" : `${Number(balance).toLocaleString()} USDC`}
+            </span>
+          </span>
+          <button
+            onClick={() => void mintUsdc()}
+            disabled={minting || isPending}
+            className="font-mono text-[10px] tracking-widest text-teal border border-teal/40 px-2.5 py-1 hover:bg-teal/10 transition-colors disabled:opacity-50"
+          >
+            {minting ? "MINTING…" : `+ MINT ${Number(faucetAmount).toLocaleString()} USDC`}
+          </button>
+        </div>
       </div>
 
       <button
@@ -162,7 +154,7 @@ function TokenBetPanel({ marketId, onSuccess }: { marketId: number; onSuccess?: 
         {isPending ? (
           <><Spinner size={14} /><span>APPROVING + WRAPPING + SEALING</span></>
         ) : (
-          <><span className="text-[15px]">⬡</span><span>SEAL & SUBMIT cUSDC BID</span></>
+          <><span className="text-[15px]">⬡</span><span>{hasPosition ? "ADD TO SEALED POSITION" : "SEAL & SUBMIT cUSDC BID"}</span></>
         )}
       </button>
 
@@ -178,23 +170,4 @@ function TokenBetPanel({ marketId, onSuccess }: { marketId: number; onSuccess?: 
       )}
     </motion.div>
   );
-}
-
-// ── Exported component ────────────────────────────────────────────────────
-
-export function BetPanel({ marketId, isTokenMarket = false, onSuccess }: BetPanelProps) {
-  const { isConnected } = useAccount();
-
-  if (!isConnected) {
-    return (
-      <div className="py-6 text-center">
-        <div className="font-mono text-[10px] tracking-widest text-ink-dim mb-2">AUTHENTICATION REQUIRED</div>
-        <p className="font-body text-ink-secondary text-[14px]">Connect wallet to place a sealed bid.</p>
-      </div>
-    );
-  }
-
-  return isTokenMarket
-    ? <TokenBetPanel marketId={marketId} onSuccess={onSuccess} />
-    : <EthBetPanel   marketId={marketId} onSuccess={onSuccess} />;
 }

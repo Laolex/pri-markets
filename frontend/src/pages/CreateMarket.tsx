@@ -8,7 +8,6 @@ import { Spinner } from "@/components/ui/Spinner";
 import { SEPOLIA_FEEDS, toFeedUnits } from "@/types";
 
 type ResolutionMode = "manual" | "oracle";
-type CollateralMode = "eth" | "cusdc";
 
 const PRESETS = [
   { q: "Will ETH close above $3000 at epoch end?",   feed: 0, strike: 3000 },
@@ -23,7 +22,6 @@ export function CreateMarket() {
   const { setTxStatus } = useAppStore();
 
   const [mode, setMode]         = useState<ResolutionMode>("oracle");
-  const [collateral, setCollateral] = useState<CollateralMode>("eth");
   const [question, setQuestion] = useState("Will ETH close above $3000 at epoch end?");
   const [durationMins, setDurationMins] = useState("5");
   const [feedIndex, setFeedIndex] = useState(0);
@@ -40,25 +38,9 @@ export function CreateMarket() {
       const secs = BigInt(Math.max(60, Number(durationMins) * 60));
       setTxStatus("Initializing epoch…");
 
+      // V2 is token-only — every market is cUSDC (createMarket / createMarketWithOracle).
       let hash: string;
-      if (collateral === "cusdc") {
-        if (mode === "oracle") {
-          const strike = toFeedUnits(Number(strikeHuman), selectedFeed.decimals);
-          hash = await writeContractAsync({
-            address: CONTRACT_ADDRESS,
-            abi: CONTRACT_ABI,
-            functionName: "createTokenMarketWithOracle",
-            args: [question, secs, selectedFeed.address as `0x${string}`, strike],
-          });
-        } else {
-          hash = await writeContractAsync({
-            address: CONTRACT_ADDRESS,
-            abi: CONTRACT_ABI,
-            functionName: "createTokenMarket",
-            args: [question, secs],
-          });
-        }
-      } else if (mode === "oracle") {
+      if (mode === "oracle") {
         const strike = toFeedUnits(Number(strikeHuman), selectedFeed.decimals);
         hash = await writeContractAsync({
           address: CONTRACT_ADDRESS,
@@ -124,29 +106,16 @@ export function CreateMarket() {
         </p>
       </div>
 
-      {/* Collateral toggle */}
+      {/* Collateral — token-only in V2 */}
       <div>
-        <div className="data-label mb-2">COLLATERAL TYPE</div>
-        <div className="grid grid-cols-2 gap-px bg-wire">
-          {(["eth", "cusdc"] as CollateralMode[]).map((c) => (
-            <button
-              key={c}
-              onClick={() => setCollateral(c)}
-              className={`py-3 font-mono text-[11px] tracking-widest uppercase transition-colors ${
-                collateral === c
-                  ? "bg-gold-faint text-gold border-b-2 border-gold"
-                  : "bg-surface text-ink-secondary hover:text-ink-primary"
-              }`}
-            >
-              {c === "eth" ? "◈ ETH (PLAINTEXT AMT)" : "⬡ cUSDC (ENCRYPTED AMT)"}
-            </button>
-          ))}
+        <div className="data-label mb-2">COLLATERAL</div>
+        <div className="px-4 py-3 border border-gold-border bg-gold-faint">
+          <div className="font-mono text-[11px] tracking-widest text-gold mb-1">⬡ cUSDC (ENCRYPTED AMOUNT)</div>
+          <p className="text-[12px] font-body text-ink-secondary">
+            Both direction AND amount are encrypted. Bets can be topped up. Single-step settlement —
+            payout never revealed in plaintext. Requires Sepolia cUSDC.
+          </p>
         </div>
-        {collateral === "cusdc" && (
-          <div className="px-4 py-3 border border-gold-border bg-gold-faint text-[12px] font-body text-ink-secondary mt-px">
-            Both direction AND amount are encrypted. Single-step settlement — payout never revealed in plaintext. Requires Sepolia cUSDC.
-          </div>
-        )}
       </div>
 
       {/* Resolution mode toggle */}
@@ -296,7 +265,7 @@ export function CreateMarket() {
                 <span>INITIALIZING EPOCH</span>
               </>
             ) : (
-              `OPEN ${collateral === "cusdc" ? "cUSDC " : ""}${mode === "oracle" ? "ORACLE" : "MANUAL"} EPOCH`
+              `OPEN cUSDC ${mode === "oracle" ? "ORACLE" : "MANUAL"} EPOCH`
             )}
           </button>
         </div>

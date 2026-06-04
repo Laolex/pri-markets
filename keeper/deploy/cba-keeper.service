@@ -1,0 +1,26 @@
+[Unit]
+Description=Confidential Batch Auction keeper — oracle auto-settlement + pool reveal
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=laolex
+WorkingDirectory=/opt/confidential-batch-auction/keeper
+# Secrets live here (chmod 600). Required: KEEPER_PRIVATE_KEY, SEPOLIA_RPC_URL.
+# Optional: ZAMA_RELAYER_URL (defaults to https://relayer.testnet.zama.org/v2)
+EnvironmentFile=/etc/cba-keeper.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=10
+# Keeper holds a hot key — basic hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/confidential-batch-auction/keeper
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cba-keeper
+
+[Install]
+WantedBy=multi-user.target

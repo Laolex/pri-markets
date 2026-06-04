@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {FHE, euint8, euint64, ebool, externalEuint8, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface AggregatorV3Interface {
     function latestRoundData() external view returns (
@@ -16,65 +17,64 @@ interface AggregatorV3Interface {
 }
 
 /// @dev Minimal interface for ERC-7984 confidential token (cUSDC on Sepolia).
-///
-///      Design: CBA decodes both encSide and encAmount via FHE.fromExternal in its
-///      own execution context (single inputProof tied to the CBA contract address).
-///      The decoded euint64 handle is then passed to the token contract — no second
-///      proof is needed because the handle is already a verified ciphertext.
-///
-///      confidentialTransferFrom — receives a pre-decoded euint64 handle from caller.
-///      confidentialTransfer    — receives a pre-computed euint64 payout handle.
+///      CBA decodes encAmount via FHE.fromExternal in its own context (one inputProof tied to the
+///      CBA address) and passes the verified euint64 handle to the token — no second proof needed.
 interface IConfidentialUSDC {
-    function confidentialTransferFrom(
-        address from,
-        address to,
-        euint64 amount          // pre-decoded by caller in caller's FHE context
-    ) external returns (euint64);
-
-    function confidentialTransfer(
-        address to,
-        euint64 encryptedAmount
-    ) external;
+    function confidentialTransferFrom(address from, address to, euint64 amount) external returns (euint64);
+    function confidentialTransfer(address to, euint64 encryptedAmount) external;
 }
 
-/// @title ConfidentialBatchAuction — sealed-bid directional discovery for information markets
-/// @notice Two collateral paths:
-///           ETH path  — plaintext amount, encrypted side, 2-step settlement via KMS callback.
-///           Token path — encrypted amount + side (cUSDC/ERC-7984), single-step settlement
-///                        via confidentialTransfer. Side AND payout amount are never revealed.
+/// @title ConfidentialBatchAuction V2 — sealed-bid directional discovery (token-only)
+/// @notice Continuous prediction markets leak directional flow; this seals direction (and amount)
+///         during the epoch and reveals only one aggregate clearing price at close.
 ///
-/// @dev    Resolution paths:
-///           Manual: creator calls resolveMarket() — gated to non-oracle markets only.
-///           Oracle: anyone calls resolveByOracle() after epochEnd — reads Chainlink feed,
-///                   resolves YES if price >= strikePrice, NO otherwise. Fully permissionless.
-///
-///         requestPoolReveal is permissionless — any address may trigger once the market is resolved.
-contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
-    // ──────────────────────────────────────────────────────────────────────
-    // Constants
-    // ──────────────────────────────────────────────────────────────────────
-
+/// @dev    V2 changes vs V1:
+///           • Token-only (cUSDC / ERC-7984). The plaintext-ETH path is removed — amount and side
+///             are both encrypted end-to-end, so nothing leaks even after settlement.
+///           • Top-ups: an address may bet multiple times. Each position keeps two encrypted
+///             sub-pools (yesStake / noStake) that accumulate across bets, so mixed-side and
+///             repeated betting are first-class. The one-bet-per-address cap is gone.
+///           • Settlement reads the winning sub-pool directly — no FHE.eq/FHE.select on the side
+///             (a losing-only bettor's winning stake is already 0), which also lowers claim HCU.
+contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard, Ownable {
+    // ── Constants ──────────────────────────────────────────────────────────
     uint8   public constant SIDE_NO    = 0;
     uint8   public constant SIDE_YES   = 1;
     uint8   public constant UNRESOLVED = 255;
-    uint256 public constant MIN_BET    = 0.001 ether;
-    uint256 public constant MIN_TOKEN_BET = 1e4; // 0.01 USDC (6 decimals)
 
-    // Deployed cUSDC on Sepolia — ERC7984ERC20Wrapper wrapping USDC
-    // Official Zama cUSDC (Mock) on Sepolia — from github.com/zama-ai/protocol-apps
-    // Underlying mock USDC: 0x9b5Cd13b8eFbB58Dc25A05CF411D8056058aDFfF
+    // Official Zama cUSDC (Mock) on Sepolia — ERC7984ERC20Wrapper wrapping USDC.
     address public constant CUSDC_TOKEN = 0x7c5BF43B851c1dff1a4feE8dB225b87f2C223639;
 
-    /// @dev Returns the token address to use for token markets.
-    ///      Virtual so test harness can override with a mock address.
+    // ── Protocol economics ───────────────────────────────────────────────────
+    uint16  public constant MAX_FEE_BPS = 1000;   // hard cap: 10%
+    uint16  public protocolFeeBps;                // fee on each market's pool, in basis points
+    address public treasury;                      // receives protocol fees + no-winner pots
+
+    /// @dev Token address for markets. Virtual so the test harness can inject a mock.
     function _tokenAddress() internal view virtual returns (address) {
         return CUSDC_TOKEN;
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // Data structures
-    // ──────────────────────────────────────────────────────────────────────
+    /// @param treasury_ fee recipient; falls back to the deployer if zero.
+    constructor(address treasury_) Ownable(msg.sender) {
+        treasury       = treasury_ == address(0) ? msg.sender : treasury_;
+        protocolFeeBps = 200; // 2% default — owner-adjustable up to MAX_FEE_BPS
+    }
 
+    // ── Admin (owner) ──────────────────────────────────────────────────────────
+    function setProtocolFee(uint16 bps) external onlyOwner {
+        require(bps <= MAX_FEE_BPS, "Fee too high");
+        protocolFeeBps = bps;
+        emit ProtocolFeeUpdated(bps);
+    }
+
+    function setTreasury(address t) external onlyOwner {
+        require(t != address(0), "Zero treasury");
+        treasury = t;
+        emit TreasuryUpdated(t);
+    }
+
+    // ── Data structures ────────────────────────────────────────────────────
     struct Market {
         address creator;
         string  question;
@@ -82,8 +82,7 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
         uint64  epochEnd;
         bool    resolved;
         uint8   outcome;              // SIDE_YES, SIDE_NO, or UNRESOLVED
-        uint256 totalEth;             // ETH path: plaintext wei deposited
-        euint64 yesPool;              // encrypted accumulator (gwei for ETH, raw units for token)
+        euint64 yesPool;              // encrypted accumulator (raw token units)
         euint64 noPool;
         uint256 revealedYesPool;      // plaintext, set after Pattern-3 reveal
         uint256 revealedNoPool;
@@ -94,63 +93,53 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
         address priceFeed;
         int256  strikePrice;
         bool    useOracle;
-        // Token market
-        bool    isTokenMarket;
-        address token;                // ERC-7984 token address (or address(0) for ETH markets)
-        uint256 participantCount;     // total bids placed (both paths)
+        address token;                // ERC-7984 token address
+        uint256 betCount;             // total bids placed (counts top-ups)
+        uint256 bettorCount;          // unique addresses
+        // Fee accounting (plaintext, set at reveal)
+        uint256 feeAmount;            // protocol fee skimmed from the pool
+        uint256 distributable;        // totalPool − feeAmount; what winners split
+        bool    feesSwept;            // treasury sweep done
     }
 
+    /// @dev Per-position encrypted sub-pools. The side is never stored in plaintext; bets are routed
+    ///      by the encrypted side into yesStake/noStake at submission. Settlement uses only the
+    ///      winning sub-pool, so the side is never compared in plaintext.
     struct Position {
-        bool    exists;           // true once any bet is placed
-        euint8  side;             // encrypted direction — NEVER publicly revealed
-        // ETH path
-        uint256 amount;           // plaintext wei (ETH path) or 0 (token path)
-        euint64 encPayout;        // set in requestPayout (ETH path)
-        bool    payoutRequested;
-        // Token path
-        euint64 encAmount;        // encrypted token units (token path) or empty (ETH path)
-        bool    isToken;
-        // Common
+        bool    exists;
+        euint64 yesStake;
+        euint64 noStake;
         bool    claimed;
+        euint64 payout;     // encrypted payout, set at claim; claimer-decryptable
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // State
-    // ──────────────────────────────────────────────────────────────────────
-
+    // ── State ──────────────────────────────────────────────────────────────
     Market[] private markets;
     mapping(uint256 => mapping(address => Position)) private positions;
 
-    // ──────────────────────────────────────────────────────────────────────
-    // Events
-    // ──────────────────────────────────────────────────────────────────────
-
-    event MarketCreated(uint256 indexed marketId, address creator, string question, uint64 epochStart, uint64 epochEnd);
-    event MarketCreatedWithOracle(uint256 indexed marketId, address creator, string question, uint64 epochStart, uint64 epochEnd, address priceFeed, int256 strikePrice);
-    event TokenMarketCreated(uint256 indexed marketId, address creator, string question, uint64 epochStart, uint64 epochEnd, address token);
-    event TokenMarketCreatedWithOracle(uint256 indexed marketId, address creator, string question, uint64 epochStart, uint64 epochEnd, address token, address priceFeed, int256 strikePrice);
-    event BetPlaced(uint256 indexed marketId, address indexed bettor, uint256 amount);
-    event TokenBetPlaced(uint256 indexed marketId, address indexed bettor);
+    // ── Events ─────────────────────────────────────────────────────────────
+    event MarketCreated(uint256 indexed marketId, address creator, string question, uint64 epochStart, uint64 epochEnd, address token);
+    event MarketCreatedWithOracle(uint256 indexed marketId, address creator, string question, uint64 epochStart, uint64 epochEnd, address token, address priceFeed, int256 strikePrice);
+    event BetPlaced(uint256 indexed marketId, address indexed bettor, bool topUp);
     event MarketResolved(uint256 indexed marketId, uint8 outcome);
     event MarketResolvedByOracle(uint256 indexed marketId, uint8 outcome, int256 price, int256 strikePrice);
     event PoolRevealRequested(uint256 indexed marketId, bytes32[2] handles);
     event PoolRevealed(uint256 indexed marketId, uint256 yesPool, uint256 noPool, uint256 clearingPrice);
-    event PayoutRequested(uint256 indexed marketId, address indexed bettor, bytes32 handle);
-    event PayoutClaimed(uint256 indexed marketId, address indexed bettor, uint256 payout);
-    event TokenPayoutClaimed(uint256 indexed marketId, address indexed bettor);
+    event PayoutClaimed(uint256 indexed marketId, address indexed bettor);
+    event FeesSwept(uint256 indexed marketId, address indexed treasury, uint256 amount, bool noWinners);
+    event ProtocolFeeUpdated(uint16 bps);
+    event TreasuryUpdated(address treasury);
 
-    // ──────────────────────────────────────────────────────────────────────
-    // Market lifecycle — ETH markets
-    // ──────────────────────────────────────────────────────────────────────
-
+    // ── Market lifecycle ─────────────────────────────────────────────────────
     function createMarket(
         string calldata question,
         uint64 epochDuration
     ) external returns (uint256 marketId) {
         require(bytes(question).length > 0, "Empty question");
         require(epochDuration >= 60, "Epoch too short");
-        marketId = _initMarket(question, epochDuration, false, address(0));
-        emit MarketCreated(marketId, msg.sender, question, markets[marketId].epochStart, markets[marketId].epochEnd);
+        marketId = _initMarket(question, epochDuration);
+        Market storage m = markets[marketId];
+        emit MarketCreated(marketId, msg.sender, question, m.epochStart, m.epochEnd, m.token);
     }
 
     function createMarketWithOracle(
@@ -163,62 +152,27 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
         require(epochDuration >= 60, "Epoch too short");
         require(priceFeed != address(0), "Invalid feed address");
         require(strikePrice > 0, "Strike price must be positive");
-        marketId = _initMarket(question, epochDuration, false, address(0));
+        marketId = _initMarket(question, epochDuration);
         Market storage m = markets[marketId];
         m.priceFeed   = priceFeed;
         m.strikePrice = strikePrice;
         m.useOracle   = true;
-        emit MarketCreatedWithOracle(marketId, msg.sender, question, m.epochStart, m.epochEnd, priceFeed, strikePrice);
-    }
-
-    // ──────────────────────────────────────────────────────────────────────
-    // Market lifecycle — Token markets (cUSDC / ERC-7984)
-    // ──────────────────────────────────────────────────────────────────────
-
-    function createTokenMarket(
-        string calldata question,
-        uint64 epochDuration
-    ) external returns (uint256 marketId) {
-        require(bytes(question).length > 0, "Empty question");
-        require(epochDuration >= 60, "Epoch too short");
-        marketId = _initMarket(question, epochDuration, true, _tokenAddress());
-        emit TokenMarketCreated(marketId, msg.sender, question, markets[marketId].epochStart, markets[marketId].epochEnd, _tokenAddress());
-    }
-
-    function createTokenMarketWithOracle(
-        string calldata question,
-        uint64 epochDuration,
-        address priceFeed,
-        int256 strikePrice
-    ) external returns (uint256 marketId) {
-        require(bytes(question).length > 0, "Empty question");
-        require(epochDuration >= 60, "Epoch too short");
-        require(priceFeed != address(0), "Invalid feed address");
-        require(strikePrice > 0, "Strike price must be positive");
-        marketId = _initMarket(question, epochDuration, true, _tokenAddress());
-        Market storage m = markets[marketId];
-        m.priceFeed   = priceFeed;
-        m.strikePrice = strikePrice;
-        m.useOracle   = true;
-        emit TokenMarketCreatedWithOracle(marketId, msg.sender, question, m.epochStart, m.epochEnd, _tokenAddress(), priceFeed, strikePrice);
+        emit MarketCreatedWithOracle(marketId, msg.sender, question, m.epochStart, m.epochEnd, m.token, priceFeed, strikePrice);
     }
 
     function _initMarket(
         string calldata question,
-        uint64 epochDuration,
-        bool isTokenMarket,
-        address token
+        uint64 epochDuration
     ) internal returns (uint256 marketId) {
         marketId = markets.length;
         markets.push();
         Market storage m = markets[marketId];
-        m.creator        = msg.sender;
-        m.question       = question;
-        m.epochStart     = uint64(block.timestamp);
-        m.epochEnd       = uint64(block.timestamp) + epochDuration;
-        m.outcome        = UNRESOLVED;
-        m.isTokenMarket  = isTokenMarket;
-        m.token          = token;
+        m.creator     = msg.sender;
+        m.question    = question;
+        m.epochStart  = uint64(block.timestamp);
+        m.epochEnd    = uint64(block.timestamp) + epochDuration;
+        m.outcome     = UNRESOLVED;
+        m.token       = _tokenAddress();
 
         euint64 zeroYes = FHE.asEuint64(0);
         FHE.allowThis(zeroYes);
@@ -229,64 +183,12 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
         m.noPool = zeroNo;
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // Bid submission — ETH path
-    // ──────────────────────────────────────────────────────────────────────
-
+    // ── Bid submission (cUSDC / ERC-7984) ────────────────────────────────────
+    /// @notice Place a sealed bid using cUSDC. Both direction AND amount are encrypted. Callable
+    ///         multiple times per address — each call tops up the caller's encrypted sub-pools.
+    ///         A single inputProof covers both encSide (uint8) and encAmount (uint64):
+    ///         createEncryptedInput(contract, user).add8(side).add64(amount).encrypt()
     function placeBet(
-        uint256 marketId,
-        bytes32 encSide,
-        bytes calldata inputProof
-    ) external payable nonReentrant {
-        require(marketId < markets.length, "Bad market");
-        Market storage m = markets[marketId];
-        require(!m.isTokenMarket, "Token market: use placeBetToken");
-        require(msg.value >= MIN_BET, "Below minimum bet");
-        require(!m.resolved, "Market resolved");
-        require(block.timestamp < m.epochEnd, "Epoch closed");
-        require(!positions[marketId][msg.sender].exists, "Already bet");
-
-        uint64 amtGwei = uint64(msg.value / 1e9);
-        require(amtGwei > 0, "Amount rounds to zero gwei");
-
-        euint8 side = FHE.fromExternal(externalEuint8.wrap(encSide), inputProof);
-        FHE.allowThis(side);
-        FHE.allow(side, msg.sender);
-
-        ebool isYes        = FHE.eq(side, FHE.asEuint8(SIDE_YES));
-        euint64 fullAmt    = FHE.asEuint64(amtGwei);
-        euint64 zeroAmt    = FHE.asEuint64(0);
-        euint64 yesContrib = FHE.select(isYes, fullAmt, zeroAmt);
-        euint64 noContrib  = FHE.select(FHE.not(isYes), fullAmt, zeroAmt);
-
-        euint64 newYesPool = FHE.add(m.yesPool, yesContrib);
-        FHE.allowThis(newYesPool);
-        m.yesPool = newYesPool;
-
-        euint64 newNoPool = FHE.add(m.noPool, noContrib);
-        FHE.allowThis(newNoPool);
-        m.noPool = newNoPool;
-
-        m.totalEth += msg.value;
-        m.participantCount++;
-
-        Position storage pos = positions[marketId][msg.sender];
-        pos.exists = true;
-        pos.side   = side;
-        pos.amount = msg.value;
-
-        emit BetPlaced(marketId, msg.sender, msg.value);
-    }
-
-    // ──────────────────────────────────────────────────────────────────────
-    // Bid submission — Token path (cUSDC / ERC-7984)
-    // ──────────────────────────────────────────────────────────────────────
-
-    /// @notice Place a sealed bid using cUSDC. Both direction AND amount are encrypted.
-    ///         The user must have cUSDC balance (wrap USDC → cUSDC via cUSDC.depositFor first).
-    ///         A single inputProof covers both encSide (uint8) and encAmount (uint64).
-    ///         Frontend: createEncryptedInput(contract, user).add8(side).add64(amount).encrypt()
-    function placeBetToken(
         uint256 marketId,
         bytes32 encSide,
         bytes32 encAmount,
@@ -294,57 +196,57 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
     ) external nonReentrant {
         require(marketId < markets.length, "Bad market");
         Market storage m = markets[marketId];
-        require(m.isTokenMarket, "ETH market: use placeBet");
         require(!m.resolved, "Market resolved");
         require(block.timestamp < m.epochEnd, "Epoch closed");
-        require(!positions[marketId][msg.sender].exists, "Already bet");
 
-        // Decode both handles in CBA context — one inputProof covers both handles
-        // from a single createEncryptedInput().add8(side).add64(amount).encrypt() call.
+        // Decode both handles in CBA context — one inputProof covers both.
         euint8  side = FHE.fromExternal(externalEuint8.wrap(encSide),   inputProof);
         euint64 amt  = FHE.fromExternal(externalEuint64.wrap(encAmount), inputProof);
         FHE.allowThis(side);
-        FHE.allow(side, msg.sender);
         FHE.allowThis(amt);
 
-        // Grant the token contract transient permission to use the decoded handle,
-        // then transfer — no second proof needed (handle already verified above).
+        // Pull the encrypted amount in. No second proof — handle already verified above.
         FHE.allowTransient(amt, m.token);
-        euint64 received = IConfidentialUSDC(m.token).confidentialTransferFrom(
-            msg.sender, address(this), amt
-        );
+        euint64 received = IConfidentialUSDC(m.token).confidentialTransferFrom(msg.sender, address(this), amt);
         FHE.allowThis(received);
-        FHE.allow(received, msg.sender);
 
-        // Route into encrypted pools
-        ebool isYes        = FHE.eq(side, FHE.asEuint8(SIDE_YES));
+        // Route by encrypted side into YES / NO contributions.
+        ebool   isYes      = FHE.eq(side, FHE.asEuint8(SIDE_YES));
         euint64 zeroAmt    = FHE.asEuint64(0);
         euint64 yesContrib = FHE.select(isYes, received, zeroAmt);
         euint64 noContrib  = FHE.select(FHE.not(isYes), received, zeroAmt);
 
+        // Market pools.
         euint64 newYesPool = FHE.add(m.yesPool, yesContrib);
         FHE.allowThis(newYesPool);
         m.yesPool = newYesPool;
-
         euint64 newNoPool = FHE.add(m.noPool, noContrib);
         FHE.allowThis(newNoPool);
         m.noPool = newNoPool;
 
-        m.participantCount++;
-
+        // Per-position sub-pools (accumulate across top-ups).
         Position storage pos = positions[marketId][msg.sender];
-        pos.exists    = true;
-        pos.side      = side;
-        pos.encAmount = received;
-        pos.isToken   = true;
+        bool topUp = pos.exists;
+        if (!pos.exists) {
+            euint64 z1 = FHE.asEuint64(0); FHE.allowThis(z1); pos.yesStake = z1;
+            euint64 z2 = FHE.asEuint64(0); FHE.allowThis(z2); pos.noStake  = z2;
+            pos.exists = true;
+            m.bettorCount++;
+        }
+        euint64 newYesStake = FHE.add(pos.yesStake, yesContrib);
+        FHE.allowThis(newYesStake);
+        FHE.allow(newYesStake, msg.sender);
+        pos.yesStake = newYesStake;
+        euint64 newNoStake = FHE.add(pos.noStake, noContrib);
+        FHE.allowThis(newNoStake);
+        FHE.allow(newNoStake, msg.sender);
+        pos.noStake = newNoStake;
 
-        emit TokenBetPlaced(marketId, msg.sender);
+        m.betCount++;
+        emit BetPlaced(marketId, msg.sender, topUp);
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // Resolution
-    // ──────────────────────────────────────────────────────────────────────
-
+    // ── Resolution ────────────────────────────────────────────────────────────
     function resolveMarket(uint256 marketId, uint8 outcome) external {
         require(marketId < markets.length, "Bad market");
         Market storage m = markets[marketId];
@@ -374,10 +276,7 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
         emit MarketResolvedByOracle(marketId, outcome, price, m.strikePrice);
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // Pool reveal — Pattern 3 (same for both ETH and token markets)
-    // ──────────────────────────────────────────────────────────────────────
-
+    // ── Pool reveal — Pattern 3 ───────────────────────────────────────────────
     function requestPoolReveal(uint256 marketId) external {
         require(marketId < markets.length, "Bad market");
         Market storage m = markets[marketId];
@@ -419,133 +318,93 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
             noRaw  := calldataload(add(cleartexts.offset, 32))
         }
 
-        // ETH markets: pools are in gwei → convert to wei.
-        // Token markets: pools are in raw token units (6 decimals for USDC) → store as-is.
-        if (m.isTokenMarket) {
-            m.revealedYesPool = yesRaw;
-            m.revealedNoPool  = noRaw;
-        } else {
-            m.revealedYesPool = yesRaw * 1e9;
-            m.revealedNoPool  = noRaw  * 1e9;
-        }
+        // Token pools are raw token units (6 decimals for USDC) — store as-is.
+        m.revealedYesPool = yesRaw;
+        m.revealedNoPool  = noRaw;
 
         uint256 totalPool = m.revealedYesPool + m.revealedNoPool;
         m.clearingPrice   = totalPool > 0 ? (m.revealedYesPool * 10000) / totalPool : 0;
+
+        // Skim the protocol fee now that pools are plaintext. Winners split `distributable`;
+        // the fee (and, when there are no winners, the whole pot) is later swept to the treasury.
+        m.feeAmount     = (totalPool * protocolFeeBps) / 10000;
+        m.distributable = totalPool - m.feeAmount;
+
         m.poolRevealed    = true;
 
         emit PoolRevealed(marketId, m.revealedYesPool, m.revealedNoPool, m.clearingPrice);
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // Settlement — ETH path (2-step via KMS callback)
-    // ──────────────────────────────────────────────────────────────────────
-
-    function requestPayout(uint256 marketId) external {
+    // ── Settlement (single-step, no KMS callback) ─────────────────────────────
+    /// @notice Claim cUSDC payout in one tx. Payout is computed entirely in the coprocessor:
+    ///           payout = winningStake * distributable / winPool
+    ///         where `distributable` is the pool after the protocol fee. Never reveals side or
+    ///         amount. A bettor with no winning stake claims 0 (the encrypted stake is already 0).
+    ///         The encrypted payout is stored and made decryptable by the claimer, so the UI can
+    ///         show them exactly how much they won — without anyone else seeing it.
+    function claim(uint256 marketId) external nonReentrant {
         require(marketId < markets.length, "Bad market");
         Market storage m = markets[marketId];
         require(m.poolRevealed, "Pool not revealed");
 
         Position storage pos = positions[marketId][msg.sender];
-        require(pos.exists && !pos.isToken, "No ETH position");
-        require(!pos.payoutRequested, "Already requested");
-
-        uint256 winPool        = m.outcome == SIDE_YES ? m.revealedYesPool : m.revealedNoPool;
-        uint64 fullPayoutGwei  = winPool > 0
-            ? uint64((pos.amount * m.totalEth) / winPool / 1e9)
-            : 0;
-
-        ebool won      = FHE.eq(pos.side, FHE.asEuint8(m.outcome));
-        euint64 encPay = FHE.select(won, FHE.asEuint64(fullPayoutGwei), FHE.asEuint64(0));
-        FHE.allowThis(encPay);
-        FHE.allow(encPay, msg.sender);
-        FHE.makePubliclyDecryptable(encPay);
-
-        pos.encPayout       = encPay;
-        pos.payoutRequested = true;
-
-        emit PayoutRequested(marketId, msg.sender, FHE.toBytes32(encPay));
-    }
-
-    function onPayoutRevealed(
-        uint256 marketId,
-        address bettor,
-        bytes32[] calldata handlesList,
-        bytes calldata cleartexts,
-        bytes calldata decryptionProof
-    ) external nonReentrant {
-        require(marketId < markets.length, "Bad market");
-        Position storage pos = positions[marketId][bettor];
-        require(pos.payoutRequested, "Payout not requested");
-        require(!pos.claimed, "Already claimed");
-        require(handlesList.length == 1, "Need 1 handle");
-        require(cleartexts.length == 32, "Bad cleartext length");
-
-        require(handlesList[0] == FHE.toBytes32(pos.encPayout), "Payout handle mismatch");
-        FHE.checkSignatures(handlesList, cleartexts, decryptionProof);
-
-        uint256 payoutGwei;
-        assembly {
-            payoutGwei := calldataload(cleartexts.offset)
-        }
-        uint256 payout = payoutGwei * 1e9;
-        pos.claimed = true;
-
-        if (payout > 0) {
-            (bool ok,) = bettor.call{value: payout}("");
-            require(ok, "ETH transfer failed");
-        }
-
-        emit PayoutClaimed(marketId, bettor, payout);
-    }
-
-    // ──────────────────────────────────────────────────────────────────────
-    // Settlement — Token path (single-step, no KMS callback)
-    // ──────────────────────────────────────────────────────────────────────
-
-    /// @notice Claim cUSDC payout in a single transaction. No KMS callback needed.
-    ///         Payout is computed entirely inside the coprocessor:
-    ///           encPayout = FHE.select(won, encAmount * totalPool / winPool, 0)
-    ///         Both totalPool and winPool are plaintext scalars after pool reveal.
-    ///         The payout amount is never written to plaintext storage or emitted.
-    function claimToken(uint256 marketId) external nonReentrant {
-        require(marketId < markets.length, "Bad market");
-        Market storage m = markets[marketId];
-        require(m.isTokenMarket, "Not a token market");
-        require(m.poolRevealed, "Pool not revealed");
-
-        Position storage pos = positions[marketId][msg.sender];
-        require(pos.exists && pos.isToken, "No token position");
+        require(pos.exists, "No position");
         require(!pos.claimed, "Already claimed");
 
-        uint256 winPool   = m.outcome == SIDE_YES ? m.revealedYesPool : m.revealedNoPool;
-        uint256 totalPool = m.revealedYesPool + m.revealedNoPool;
+        uint256 winPool = m.outcome == SIDE_YES ? m.revealedYesPool : m.revealedNoPool;
+        require(winPool <= type(uint64).max, "Pool overflow");
 
-        // Both scalars must fit in uint64 — guaranteed for USDC testnet amounts
-        require(totalPool <= type(uint64).max, "Pool overflow");
-        require(winPool   <= type(uint64).max, "Pool overflow");
+        // The caller's stake on the winning side (encrypted). Losing-only bettors have 0 here.
+        euint64 winStake = m.outcome == SIDE_YES ? pos.yesStake : pos.noStake;
 
-        // Proportional payout using scalar FHE ops (~1.1M HCU, well within 20M limit)
-        euint64 numerator  = FHE.mul(pos.encAmount, uint64(totalPool));
-        euint64 fullPayout = winPool > 0
+        // Winners split the after-fee pool. winPool == 0 (no winners) → payout 0; the whole pot
+        // is swept to the treasury via sweepFees instead.
+        euint64 numerator  = FHE.mul(winStake, uint64(m.distributable));
+        euint64 encPayout  = winPool > 0
             ? FHE.div(numerator, uint64(winPool))
             : FHE.asEuint64(0);
 
-        ebool won         = FHE.eq(pos.side, FHE.asEuint8(m.outcome));
-        euint64 encPayout = FHE.select(won, fullPayout, FHE.asEuint64(0));
-
         pos.claimed = true;
 
-        // Transient permission for same-tx cross-contract call
+        // Persist + authorize the claimer to decrypt their own payout ("you won X cUSDC").
+        FHE.allowThis(encPayout);
+        FHE.allow(encPayout, msg.sender);
+        pos.payout = encPayout;
+
         FHE.allowTransient(encPayout, m.token);
         IConfidentialUSDC(m.token).confidentialTransfer(msg.sender, encPayout);
 
-        emit TokenPayoutClaimed(marketId, msg.sender);
+        emit PayoutClaimed(marketId, msg.sender);
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // Views
-    // ──────────────────────────────────────────────────────────────────────
+    /// @notice Sweep the protocol fee (and, when there are no winners, the entire stranded pot)
+    ///         to the treasury. Permissionless — funds always go to `treasury`. Idempotent.
+    function sweepFees(uint256 marketId) external nonReentrant {
+        require(marketId < markets.length, "Bad market");
+        Market storage m = markets[marketId];
+        require(m.poolRevealed, "Pool not revealed");
+        require(!m.feesSwept, "Already swept");
 
+        uint256 winPool   = m.outcome == SIDE_YES ? m.revealedYesPool : m.revealedNoPool;
+        uint256 totalPool = m.revealedYesPool + m.revealedNoPool;
+        require(totalPool <= type(uint64).max, "Pool overflow");
+
+        // Winners claim `distributable`, leaving exactly `feeAmount`. With no winners nobody can
+        // claim, so the whole pot is the sweep.
+        bool    noWinners   = winPool == 0;
+        uint256 sweepAmount = noWinners ? totalPool : m.feeAmount;
+
+        m.feesSwept = true;
+        if (sweepAmount > 0) {
+            euint64 encSweep = FHE.asEuint64(uint64(sweepAmount));
+            FHE.allowTransient(encSweep, m.token);
+            IConfidentialUSDC(m.token).confidentialTransfer(treasury, encSweep);
+        }
+
+        emit FeesSwept(marketId, treasury, sweepAmount, noWinners);
+    }
+
+    // ── Views ─────────────────────────────────────────────────────────────────
     function marketCount() external view returns (uint256) {
         return markets.length;
     }
@@ -559,7 +418,6 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
             uint64  epochEnd,
             bool    resolved,
             uint8   outcome,
-            uint256 totalEth,
             uint256 revealedYesPool,
             uint256 revealedNoPool,
             uint256 clearingPrice,
@@ -568,45 +426,35 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
             address priceFeed,
             int256  strikePrice,
             bool    useOracle,
-            bool    isTokenMarket,
             address token,
-            uint256 participantCount
+            uint256 betCount,
+            uint256 bettorCount
         )
     {
         require(marketId < markets.length, "Bad market");
         Market storage m = markets[marketId];
         return (
-            m.creator,
-            m.question,
-            m.epochStart,
-            m.epochEnd,
-            m.resolved,
-            m.outcome,
-            m.totalEth,
-            m.revealedYesPool,
-            m.revealedNoPool,
-            m.clearingPrice,
-            m.poolRevealRequested,
-            m.poolRevealed,
-            m.priceFeed,
-            m.strikePrice,
-            m.useOracle,
-            m.isTokenMarket,
-            m.token,
-            m.participantCount
+            m.creator, m.question, m.epochStart, m.epochEnd, m.resolved, m.outcome,
+            m.revealedYesPool, m.revealedNoPool, m.clearingPrice,
+            m.poolRevealRequested, m.poolRevealed,
+            m.priceFeed, m.strikePrice, m.useOracle, m.token, m.betCount, m.bettorCount
         );
     }
 
     function getPosition(uint256 marketId, address bettor)
         external view
-        returns (uint256 amount, bool payoutRequested, bool claimed, bool isToken)
+        returns (bool exists, bool claimed)
     {
         Position storage pos = positions[marketId][bettor];
-        return (pos.amount, pos.payoutRequested, pos.claimed, pos.isToken);
+        return (pos.exists, pos.claimed);
     }
 
-    function getEncSide(uint256 marketId, address bettor) external view returns (euint8) {
-        return positions[marketId][bettor].side;
+    function getEncStakes(uint256 marketId, address bettor)
+        external view
+        returns (euint64 yesStake, euint64 noStake)
+    {
+        Position storage pos = positions[marketId][bettor];
+        return (pos.yesStake, pos.noStake);
     }
 
     function getEncPools(uint256 marketId) external view returns (euint64 yesPool, euint64 noPool) {
@@ -615,11 +463,19 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard {
         return (m.yesPool, m.noPool);
     }
 
-    function getEncPayout(uint256 marketId, address bettor) external view returns (euint64) {
-        return positions[marketId][bettor].encPayout;
+    /// @notice The claimer's encrypted payout handle (set at claim). Only the claimer has ACL to
+    ///         decrypt it via the relayer — the UI uses this to show "you won X cUSDC".
+    function getEncPayout(uint256 marketId, address bettor) external view returns (euint64 payout) {
+        return positions[marketId][bettor].payout;
     }
 
-    function getEncAmount(uint256 marketId, address bettor) external view returns (euint64) {
-        return positions[marketId][bettor].encAmount;
+    /// @notice Plaintext fee accounting for a revealed market.
+    function getFeeInfo(uint256 marketId)
+        external view
+        returns (uint16 feeBps, uint256 feeAmount, uint256 distributable, bool feesSwept)
+    {
+        require(marketId < markets.length, "Bad market");
+        Market storage m = markets[marketId];
+        return (protocolFeeBps, m.feeAmount, m.distributable, m.feesSwept);
     }
 }

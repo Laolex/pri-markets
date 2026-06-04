@@ -1,4 +1,3 @@
-import { formatEther } from "viem";
 import { useNavigate } from "react-router-dom";
 import { useAccount } from "wagmi";
 import { motion } from "framer-motion";
@@ -11,8 +10,8 @@ function shortAddr(addr: string) {
   return addr.slice(0, 6) + "…" + addr.slice(-4);
 }
 
-function fmtEth(wei: bigint) {
-  return Number(formatEther(wei)).toFixed(4);
+function fmtUsdc(raw: bigint) {
+  return (Number(raw) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 function SealedPoolBar() {
@@ -100,11 +99,9 @@ export function MarketCard({ market, index }: { market: MarketView; index: numbe
               ⬡ ORACLE
             </span>
           )}
-          {market.isTokenMarket && (
-            <span className="font-mono text-[9px] tracking-wider text-gold border border-gold-border bg-gold-faint px-1.5 py-0.5">
-              cUSDC
-            </span>
-          )}
+          <span className="font-mono text-[9px] tracking-wider text-gold border border-gold-border bg-gold-faint px-1.5 py-0.5">
+            cUSDC
+          </span>
         </div>
         <MarketStatusBadge status={market.epochStatus} />
       </div>
@@ -140,20 +137,20 @@ export function MarketCard({ market, index }: { market: MarketView; index: numbe
           )}
         </div>
 
-        {/* Volume */}
+        {/* Volume — amounts are encrypted until reveal; show bid count, then total pool */}
         <div className="px-4 py-3">
-          <div className="data-label mb-2">VOLUME</div>
+          <div className="data-label mb-2">{isRevealed ? "TOTAL POOL" : "BIDS"}</div>
           <div className="flex items-baseline gap-1">
             <span className={`font-display text-[22px] leading-none ${
               isLive ? "text-gold" : "text-ink-primary"
             }`}>
-              {fmtEth(market.totalEth)}
+              {isRevealed ? fmtUsdc(market.revealedYesPool + market.revealedNoPool) : market.betCount.toString()}
             </span>
-            <span className="font-mono text-[10px] text-ink-dim">ETH</span>
+            <span className="font-mono text-[10px] text-ink-dim">{isRevealed ? "USDC" : "SEALED"}</span>
           </div>
-          {market.participantCount > 0n && (
+          {market.bettorCount > 0n && (
             <div className="font-mono text-[9px] text-ink-dim mt-0.5">
-              {market.participantCount.toString()} BID{market.participantCount !== 1n ? "S" : ""}
+              {market.bettorCount.toString()} BETTOR{market.bettorCount !== 1n ? "S" : ""}
             </div>
           )}
         </div>

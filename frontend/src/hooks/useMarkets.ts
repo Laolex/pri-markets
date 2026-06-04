@@ -2,22 +2,22 @@ import { useReadContract } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { createPublicClient, http } from "viem";
 import { sepolia } from "wagmi/chains";
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from "@/lib/contracts/config";
+import { CONTRACT_ADDRESS, CONTRACT_ABI, SEPOLIA_RPC } from "@/lib/contracts/config";
 import { type MarketView, computeEpochStatus } from "@/types";
 
-const publicClient = createPublicClient({ chain: sepolia, transport: http() });
+const publicClient = createPublicClient({ chain: sepolia, transport: http(SEPOLIA_RPC) });
 
 function parseMarket(id: number, raw: readonly unknown[]): MarketView {
   const [
-    creator, question, epochStart, epochEnd, resolved, outcome, totalEth,
+    creator, question, epochStart, epochEnd, resolved, outcome,
     revealedYesPool, revealedNoPool, clearingPrice, poolRevealRequested, poolRevealed,
     priceFeed, strikePrice, useOracle,
-    isTokenMarket, token, participantCount,
+    token, betCount, bettorCount,
   ] = raw as [
-    string, string, bigint, bigint, boolean, number, bigint,
+    string, string, bigint, bigint, boolean, number,
     bigint, bigint, bigint, boolean, boolean,
     string, bigint, boolean,
-    boolean, string, bigint,
+    string, bigint, bigint,
   ];
   const m: MarketView = {
     id,
@@ -27,18 +27,17 @@ function parseMarket(id: number, raw: readonly unknown[]): MarketView {
     epochEnd: Number(epochEnd),
     resolved,
     outcome: Number(outcome),
-    totalEth,
     clearingPrice,
     revealedYesPool,
     revealedNoPool,
     poolRevealRequested,
     poolRevealed,
-    priceFeed:        priceFeed       ?? "0x0000000000000000000000000000000000000000",
-    strikePrice:      strikePrice     ?? 0n,
-    useOracle:        useOracle       ?? false,
-    isTokenMarket:    isTokenMarket   ?? false,
-    token:            token           ?? "0x0000000000000000000000000000000000000000",
-    participantCount: participantCount ?? 0n,
+    priceFeed:   priceFeed   ?? "0x0000000000000000000000000000000000000000",
+    strikePrice: strikePrice ?? 0n,
+    useOracle:   useOracle    ?? false,
+    token:       token        ?? "0x0000000000000000000000000000000000000000",
+    betCount:    betCount     ?? 0n,
+    bettorCount: bettorCount  ?? 0n,
     epochStatus: "accumulating",
   };
   m.epochStatus = computeEpochStatus(m);
@@ -99,8 +98,8 @@ export function usePosition(marketId: number, address?: string) {
       enabled: !!address,
       refetchInterval: 5_000,
       select: (data) => {
-        const [amount, payoutRequested, claimed, isToken] = data as [bigint, boolean, boolean, boolean];
-        return (amount > 0n || isToken) ? { amount, payoutRequested, claimed, isToken } : null;
+        const [exists, claimed] = data as [boolean, boolean];
+        return exists ? { exists, claimed } : null;
       },
     },
   });
@@ -115,11 +114,12 @@ export function useEncPools(marketId: number) {
   });
 }
 
-export function useEncPayout(marketId: number, address?: string) {
+/** V2: per-position encrypted YES/NO sub-pool stakes. */
+export function useEncStakes(marketId: number, address?: string) {
   return useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
-    functionName: "getEncPayout",
+    functionName: "getEncStakes",
     args: [BigInt(marketId), (address ?? "0x0000000000000000000000000000000000000000") as `0x${string}`],
     query: { enabled: !!address },
   });

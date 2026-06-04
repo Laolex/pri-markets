@@ -23,7 +23,7 @@ import { ethers } from "hardhat";
 
 // Update this after deploy, or set CONTRACT_ADDRESS env var
 const CONTRACT_ADDRESS =
-  process.env.CONTRACT_ADDRESS ?? "0x06F2f1B8B5e41575a17A7EFB91Ce4d4561FF5Ae3";
+  process.env.CONTRACT_ADDRESS ?? "0xF00573FbBE32264ac14442BDC39512845D0d41C1"; // V2 (token-only)
 
 const DAY  = 60 * 60 * 24;
 const WEEK = DAY * 7;

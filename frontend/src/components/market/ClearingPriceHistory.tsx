@@ -1,11 +1,10 @@
 import { motion } from "framer-motion";
-import { formatEther } from "viem";
 import { Link } from "react-router-dom";
 import type { MarketView } from "@/types";
 import { SIDE_YES, UNRESOLVED } from "@/types";
 
-function fmtEth(wei: bigint) {
-  return Number(formatEther(wei)).toFixed(3);
+function fmtUsdc(raw: bigint) {
+  return (Number(raw) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 function PriceBar({ pct, animated }: { pct: number; animated?: boolean }) {
@@ -53,7 +52,7 @@ function EpochRow({ market, index }: { market: MarketView; index: number }) {
             <div className="flex items-center gap-3 flex-shrink-0">
               {/* Volume */}
               <span className="font-mono text-[10px] text-ink-dim hidden sm:block">
-                {fmtEth(market.totalEth)} ETH
+                {market.poolRevealed ? `${fmtUsdc(market.revealedYesPool + market.revealedNoPool)} USDC` : `${market.betCount} bids`}
               </span>
 
               {/* Outcome */}

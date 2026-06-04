@@ -1,6 +1,5 @@
-import { useClaim } from "@/hooks/useClaim";
 import { useClaimToken } from "@/hooks/useClaimToken";
-import { useAppStore } from "@/store/appStore";
+import { useRevealPayout } from "@/hooks/useRevealPayout";
 import { Spinner } from "@/components/ui/Spinner";
 import type { PositionView } from "@/types";
 
@@ -11,60 +10,53 @@ interface ClaimPanelProps {
   onSuccess?:   () => void;
 }
 
-function SettledBadge() {
-  return (
-    <div className="flex items-center gap-3 p-4 border border-teal/30 bg-teal-faint">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M3 8l4 4 6-6" stroke="#2EC4B6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <div>
-        <div className="font-mono text-[11px] text-teal tracking-wider">SETTLEMENT COMPLETE</div>
-        <div className="font-body text-[12px] text-ink-secondary mt-0.5">
-          Your directional choice was never revealed on-chain.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EthClaimPanel({ marketId, position, onSuccess }: {
-  marketId: number;
-  position: PositionView;
-  onSuccess?: () => void;
-}) {
-  const { fheStatus } = useAppStore();
-  const { claim, isPending, error } = useClaim(marketId);
-  const fheReady = fheStatus === "ready";
+function SettledBadge({ marketId }: { marketId: number }) {
+  const { revealPayout, payout, isPending, error } = useRevealPayout(marketId);
 
   return (
     <div className="space-y-3">
-      <div>
-        <div className="data-label mb-1">CONFIDENTIAL SETTLEMENT (ETH)</div>
-        <p className="font-body text-[13px] text-ink-secondary">
-          Payout computed via FHE.select — your YES/NO side is never exposed. Only the ETH amount settles.
-        </p>
+      <div className="flex items-center gap-3 p-4 border border-teal/30 bg-teal-faint">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M3 8l4 4 6-6" stroke="#2EC4B6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <div>
+          <div className="font-mono text-[11px] text-teal tracking-wider">SETTLEMENT COMPLETE</div>
+          <div className="font-body text-[12px] text-ink-secondary mt-0.5">
+            Your directional choice was never revealed on-chain.
+          </div>
+        </div>
       </div>
-      <button
-        onClick={() => claim(position.payoutRequested).then(() => onSuccess?.())}
-        disabled={isPending || !fheReady}
-        className="btn-gold flex items-center gap-3"
-      >
-        {isPending ? (
-          <><Spinner size={14} /><span>COMPUTING PAYOUT</span></>
-        ) : (
-          "CLAIM ETH SETTLEMENT"
-        )}
-      </button>
+
+      {payout === null ? (
+        <button
+          onClick={() => { void revealPayout(); }}
+          disabled={isPending}
+          className="btn-ghost flex items-center gap-2 text-[12px]"
+        >
+          {isPending ? <><Spinner size={12} /><span>DECRYPTING…</span></> : <span>⬡ REVEAL MY PAYOUT (private)</span>}
+        </button>
+      ) : payout === "0" ? (
+        <div className="px-4 py-3 border border-ink-faint/20 bg-ink-faint/5 font-mono text-[11px] text-ink-secondary">
+          No payout — this position was on the losing side.
+        </div>
+      ) : (
+        <div className="px-4 py-3 border border-gold/30 bg-gold-faint font-mono text-[12px] text-gold">
+          You won <span className="font-bold">{payout} cUSDC</span>
+          <div className="text-[9px] text-ink-secondary mt-1">
+            Decrypted client-side via relayer userDecrypt — visible only to you.
+          </div>
+        </div>
+      )}
       {error && <p className="font-mono text-[11px] text-crimson">{error}</p>}
     </div>
   );
 }
 
-function TokenClaimPanel({ marketId, onSuccess }: {
-  marketId: number;
-  onSuccess?: () => void;
-}) {
+export function ClaimPanel({ marketId, position, poolRevealed, onSuccess }: ClaimPanelProps) {
   const { claimToken, isPending, error } = useClaimToken(marketId);
+
+  if (!poolRevealed) return null;
+  if (position.claimed) return <SettledBadge marketId={marketId} />;
 
   return (
     <div className="space-y-3">
@@ -76,9 +68,9 @@ function TokenClaimPanel({ marketId, onSuccess }: {
         </p>
       </div>
       <div className="px-4 py-3 border border-teal/20 bg-teal-faint font-mono text-[9px] text-teal space-y-1">
-        <div>MECHANISM: FHE.select(won, encAmount × totalPool / winPool, 0)</div>
+        <div>MECHANISM: payout = winningStake × totalPool / winPool (coprocessor)</div>
         <div>SETTLEMENT: confidentialTransfer → cUSDC balance updated privately</div>
-        <div>SIDE: never decrypted — not even at settlement</div>
+        <div>SIDE: never decrypted — settlement reads your winning sub-pool directly</div>
       </div>
       <button
         onClick={() => claimToken().then(() => onSuccess?.())}
@@ -94,14 +86,4 @@ function TokenClaimPanel({ marketId, onSuccess }: {
       {error && <p className="font-mono text-[11px] text-crimson">{error}</p>}
     </div>
   );
-}
-
-export function ClaimPanel({ marketId, position, poolRevealed, onSuccess }: ClaimPanelProps) {
-  if (!poolRevealed) return null;
-
-  if (position.claimed) return <SettledBadge />;
-
-  return position.isToken
-    ? <TokenClaimPanel marketId={marketId} onSuccess={onSuccess} />
-    : <EthClaimPanel   marketId={marketId} position={position} onSuccess={onSuccess} />;
 }

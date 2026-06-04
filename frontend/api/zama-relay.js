@@ -32,7 +32,14 @@ export default async function handler(req) {
   }
 
   const url = new URL(req.url);
-  const path = url.pathname.replace(/^\/api\/zama-relay/, "") || "/";
+  let path = url.pathname.replace(/^\/api\/zama-relay/, "") || "/";
+
+  // The Zama relayer migrated its API under /v2; the bare paths (/keyurl, /input-proof, …)
+  // that the legacy relayer-sdk 0.4.x requests with default config now 404. relayer-sdk 0.4.3
+  // natively speaks the v2 protocol, so normalize every forwarded path to the /v2 route.
+  path = path.replace(/^\/v[12](?=\/|$)/, "");   // drop any existing version segment
+  path = path === "/" ? "/v2" : `/v2${path}`;     // always target /v2
+
   const target = `${RELAYER_ORIGIN}${path}${url.search ?? ""}`;
 
   const response = await fetch(target, {

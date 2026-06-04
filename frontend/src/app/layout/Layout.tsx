@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
@@ -37,7 +38,17 @@ const NAV_LINKS = [
 export function Layout() {
   useFhe();
   const location = useLocation();
-  const { txStatus } = useAppStore();
+  const { txStatus, clearTxStatus } = useAppStore();
+
+  // Auto-dismiss terminal toasts (success ✓ / error) after a few seconds so they don't
+  // linger forever. In-progress statuses (ending in …) persist until the flow updates them.
+  useEffect(() => {
+    if (!txStatus) return;
+    const terminal = txStatus.includes("✓") || txStatus.startsWith("Error:");
+    if (!terminal) return;
+    const t = setTimeout(clearTxStatus, 5000);
+    return () => clearTimeout(t);
+  }, [txStatus, clearTxStatus]);
 
   return (
     <div className="min-h-screen bg-void text-ink-primary font-body relative">

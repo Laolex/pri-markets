@@ -7,23 +7,27 @@ import { Spinner } from "@/components/ui/Spinner";
 import { PrivacyBoundary } from "@/components/ui/PrivacyBoundary";
 import { useAccount } from "wagmi";
 import { Link } from "react-router-dom";
-import { formatEther } from "viem";
 import type { MarketView } from "@/types";
 
 type FilterTab = "all" | "live" | "token" | "revealed";
 
+function fmtUsdc(raw: bigint) {
+  return (Number(raw) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
 function DashboardStats({ markets }: { markets: MarketView[] }) {
   const liveCount     = markets.filter(m => m.epochStatus === "accumulating").length;
   const revealedCount = markets.filter(m => m.poolRevealed).length;
-  const tokenCount    = markets.filter(m => m.isTokenMarket).length;
-  const totalVol      = markets.reduce((s, m) => s + m.totalEth, 0n);
+  const totalBids     = markets.reduce((s, m) => s + m.betCount, 0n);
+  // Amounts are encrypted until reveal — only revealed markets contribute to plaintext volume.
+  const totalVol      = markets.reduce((s, m) => s + (m.poolRevealed ? m.revealedYesPool + m.revealedNoPool : 0n), 0n);
 
   const stats = [
-    { label: "TOTAL EPOCHS",    value: markets.length.toString(),                           accent: false },
-    { label: "LIVE",            value: liveCount.toString(),                                accent: liveCount > 0 },
-    { label: "REVEALED",        value: revealedCount.toString(),                            accent: false },
-    { label: "cUSDC MARKETS",   value: tokenCount.toString(),                               accent: tokenCount > 0 },
-    { label: "TOTAL VOLUME",    value: `${Number(formatEther(totalVol)).toFixed(3)} ETH`,   accent: false },
+    { label: "TOTAL EPOCHS",    value: markets.length.toString(),         accent: false },
+    { label: "LIVE",            value: liveCount.toString(),              accent: liveCount > 0 },
+    { label: "REVEALED",        value: revealedCount.toString(),          accent: false },
+    { label: "TOTAL BIDS",      value: totalBids.toString(),              accent: totalBids > 0n },
+    { label: "REVEALED VOLUME", value: `${fmtUsdc(totalVol)} USDC`,       accent: false },
   ];
 
   return (
@@ -57,7 +61,7 @@ const FILTER_LABELS: Record<FilterTab, string> = {
 function filterMarkets(markets: MarketView[], tab: FilterTab): MarketView[] {
   switch (tab) {
     case "live":     return markets.filter(m => m.epochStatus === "accumulating");
-    case "token":    return markets.filter(m => m.isTokenMarket);
+    case "token":    return markets; // V2 is token-only — every market is cUSDC
     case "revealed": return markets.filter(m => m.poolRevealed);
     default:         return markets;
   }

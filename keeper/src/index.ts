@@ -9,7 +9,7 @@ import { refreshDemoMarkets } from "./refresh.js";
 const POLL_MS          = 30_000;        // 30 s between sweeps
 const REFRESH_INTERVAL = 6 * 60 * 60;  // 6 hours in seconds — how often to check demo slots
 const BLOCK_RANGE      = 10;            // Alchemy free tier max blocks per eth_getLogs request
-const DEPLOY_BLOCK     = 10_949_530;    // contract deployment block — oracle backfill start
+const DEPLOY_BLOCK     = 10_981_135;    // V2 (fee+treasury) deployment block — oracle backfill start
 const FALLBACK_RPC     = "https://ethereum-sepolia-rpc.publicnode.com";
 
 function requireEnv(key: string): string {
@@ -47,9 +47,16 @@ function log(msg: string) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
 }
 
-// ── Oracle auto-resolution ────────────────────────────────────────────────────
+// ── Oracle auto-settlement (resolve → request reveal) ───────────────────────────
+//
+// Drives both autonomous steps for closed oracle markets:
+//   1. resolveByOracle — commit the outcome from Chainlink
+//   2. requestPoolReveal — makePubliclyDecryptable + emit PoolRevealRequested
+// The emitted event is then serviced by handlePoolReveal (publicDecrypt → onPoolRevealed),
+// after which bettors can claim. Both calls are idempotent (guarded by on-chain flags), so a
+// market already resolved/requested by the frontend or a prior run is simply skipped.
 
-async function resolveEligibleOracleMarkets(
+async function settleEligibleOracleMarkets(
   contract: ethers.Contract,
   oracleMarketIds: number[],
 ): Promise<void> {
@@ -58,19 +65,33 @@ async function resolveEligibleOracleMarkets(
 
   for (const id of oracleMarketIds) {
     try {
-      const m = await contract.getMarket(id);
-      if (m.resolved) continue;
-      if (Number(m.epochEnd) > now) continue;
+      let m = await contract.getMarket(id);
+      if (Number(m.epochEnd) > now) continue; // epoch still open
 
-      log(`market ${id}: epoch closed, triggering oracle resolution…`);
-      const tx = await withRetry(
-        () => contract.resolveByOracle(id),
-        `resolveByOracle market=${id}`,
-      );
-      await tx.wait();
-      log(`market ${id}: oracle resolved ✓ tx=${tx.hash}`);
+      // Step 1: resolve
+      if (!m.resolved) {
+        log(`market ${id}: epoch closed, resolving via oracle…`);
+        const tx = await withRetry(() => contract.resolveByOracle(id), `resolveByOracle market=${id}`);
+        await tx.wait();
+        m = await contract.getMarket(id);
+        log(`market ${id}: resolved ✓ outcome=${Number(m.outcome)} (0=NO,1=YES) tx=${tx.hash}`);
+      }
+
+      // Step 2: request pool reveal (handlePoolReveal finishes the decryption callback)
+      if (m.resolved && !m.poolRevealRequested) {
+        log(`market ${id}: requesting pool reveal…`);
+        const tx = await withRetry(() => contract.requestPoolReveal(id), `requestPoolReveal market=${id}`);
+        await tx.wait();
+        log(`market ${id}: pool reveal requested ✓ tx=${tx.hash}`);
+      }
+
+      // Step 3: safety-net fee sweep for already-revealed markets whose reveal event was serviced
+      // before the sweep hook existed (handlePoolReveal's primary sweep covers fresh reveals).
+      if (m.poolRevealed) {
+        await sweepFeesIfPending(contract, BigInt(id));
+      }
     } catch (e) {
-      console.error(`[keeper] resolveByOracle failed market=${id}:`, (e as Error).message);
+      console.error(`[keeper] settle failed market=${id}:`, (e as Error).message);
     }
   }
 }
@@ -99,32 +120,35 @@ async function handlePoolReveal(contract: ethers.Contract, ev: ethers.EventLog) 
   );
   await tx.wait();
   log(`market ${marketId}: pool revealed ✓ tx=${tx.hash}`);
+
+  // Once pools are revealed the protocol fee (and any no-winner pot) is computable on-chain.
+  // Sweep it into the treasury. Permissionless + idempotent (guarded by feesSwept), so a retry
+  // or a prior manual sweep just no-ops.
+  await sweepFeesIfPending(contract, marketId);
 }
 
-async function handlePayout(contract: ethers.Contract, ev: ethers.EventLog) {
-  const marketId: bigint = ev.args.marketId;
-  const bettor: string   = ev.args.bettor;
-  const handle: string   = ev.args.handle;
+// ── Treasury fee sweep ──────────────────────────────────────────────────────────
+//
+// Collects the 2% protocol fee — or, when a market had no winning bettors, the entire pot —
+// into the treasury address set in the contract. Safe to call repeatedly: getFeeInfo.feesSwept
+// gates the on-chain transfer, so this skips already-swept markets.
 
-  const pos = await contract.getPosition(marketId, bettor);
-  if (pos.claimed) {
-    log(`market ${marketId} bettor ${bettor}: already claimed, skipping`);
-    return;
+async function sweepFeesIfPending(contract: ethers.Contract, marketId: bigint): Promise<void> {
+  try {
+    const info = await contract.getFeeInfo(marketId);
+    if (info.feesSwept) return;
+    log(`market ${marketId}: sweeping fees → treasury…`);
+    const tx = await withRetry(() => contract.sweepFees(marketId), `sweepFees market=${marketId}`);
+    await tx.wait();
+    log(`market ${marketId}: fees swept ✓ tx=${tx.hash}`);
+  } catch (e) {
+    console.error(`[keeper] sweepFees failed market=${marketId}:`, (e as Error).message);
   }
-
-  log(`market ${marketId}: settling payout for ${bettor}…`);
-  const { abiEncodedClearValues, decryptionProof } = await withRetry(
-    () => publicDecrypt([handle]),
-    `publicDecrypt payout market=${marketId} bettor=${bettor}`,
-  );
-
-  const tx = await withRetry(
-    () => contract.onPayoutRevealed(marketId, bettor, [handle], abiEncodedClearValues, decryptionProof),
-    `onPayoutRevealed market=${marketId} bettor=${bettor}`,
-  );
-  await tx.wait();
-  log(`market ${marketId}: settled ${bettor} ✓ tx=${tx.hash}`);
 }
+
+// V2 note: settlement is a single-step `claim()` computed entirely in the coprocessor —
+// there is no payout-reveal KMS callback for the keeper to service. The keeper's only
+// callback duty is the pool reveal above.
 
 // ── Main loop ─────────────────────────────────────────────────────────────────
 
@@ -134,10 +158,9 @@ async function processRange(
   to: number,
   oracleMarketIds: Set<number>,
 ): Promise<void> {
-  const [oracleLogs, poolLogs, payoutLogs] = await Promise.all([
+  const [oracleLogs, poolLogs] = await Promise.all([
     contract.queryFilter(contract.filters.MarketCreatedWithOracle(), from, to),
     contract.queryFilter(contract.filters.PoolRevealRequested(), from, to),
-    contract.queryFilter(contract.filters.PayoutRequested(), from, to),
   ]);
 
   for (const ev of oracleLogs) {
@@ -148,8 +171,8 @@ async function processRange(
     }
   }
 
-  if (poolLogs.length || payoutLogs.length) {
-    log(`blocks ${from}–${to}: ${poolLogs.length} pool reveal(s), ${payoutLogs.length} payout(s)`);
+  if (poolLogs.length) {
+    log(`blocks ${from}–${to}: ${poolLogs.length} pool reveal(s)`);
   }
 
   for (const ev of poolLogs) {
@@ -157,14 +180,6 @@ async function processRange(
       await handlePoolReveal(contract, ev as ethers.EventLog);
     } catch (e) {
       console.error(`[keeper] pool reveal failed market=${(ev as ethers.EventLog).args.marketId}:`, e);
-    }
-  }
-
-  for (const ev of payoutLogs) {
-    try {
-      await handlePayout(contract, ev as ethers.EventLog);
-    } catch (e) {
-      console.error(`[keeper] payout failed:`, e);
     }
   }
 }
@@ -234,7 +249,7 @@ async function main() {
         lastBlock = to;
         saveState({ lastBlock, oracleMarketIds: [...oracleMarketIds] });
       }
-      await resolveEligibleOracleMarkets(contract, [...oracleMarketIds]);
+      await settleEligibleOracleMarkets(contract, [...oracleMarketIds]);
 
       // Refresh demo market slots on startup and every 6 hours
       const now = Math.floor(Date.now() / 1000);

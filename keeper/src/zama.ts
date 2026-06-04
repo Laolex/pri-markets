@@ -15,6 +15,10 @@ async function getInstance(): Promise<FhevmInstance> {
     const config: FhevmInstanceConfig = {
       ...SepoliaConfig,
       network: rpcUrl,   // string RPC URL works for server-side (no browser wallet needed)
+      // The Zama testnet relayer migrated its API under /v2; SepoliaConfig's default points at
+      // the deprecated bare endpoints (/keyurl → 404). The SDK appends /keyurl etc. to relayerUrl,
+      // so targeting …/v2 yields the live /v2/keyurl route.
+      relayerUrl: process.env.ZAMA_RELAYER_URL ?? "https://relayer.testnet.zama.org/v2",
     };
     _inst = await createInstance(config);
   }

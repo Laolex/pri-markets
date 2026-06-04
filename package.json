@@ -6,9 +6,13 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
-    "verify:sepolia": "hardhat verify --network sepolia"
+    "verify:sepolia": "hardhat verify --network sepolia",
+    "profile": "hardhat fhe-profile",
+    "profile:ci": "hardhat fhe-profile --ci",
+    "profile:baseline": "hardhat fhe-profile --update-baseline"
   },
   "devDependencies": {
+    "hardhat-fhe-profiler": "^0.1.2",
     "@fhevm/hardhat-plugin": "^0.4.2",
     "@fhevm/solidity": "^0.11.1",
     "@nomicfoundation/hardhat-ethers": "^3.0.8",

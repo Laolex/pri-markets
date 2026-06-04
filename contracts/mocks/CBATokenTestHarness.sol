@@ -11,7 +11,8 @@ import {ConfidentialBatchAuction} from "../ConfidentialBatchAuction.sol";
 contract CBATokenTestHarness is ConfidentialBatchAuction {
     address private immutable _testToken;
 
-    constructor(address testToken_) {
+    // treasury_ = address(0) → parent defaults treasury to the deployer (test signer).
+    constructor(address testToken_) ConfidentialBatchAuction(address(0)) {
         _testToken = testToken_;
     }
 

@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "generatedAt": "2026-06-03T16:28:13.988Z",
+  "versions": {
+    "fhevmSolidity": "0.11.1",
+    "mockUtils": "0.4.2",
+    "solc": "0.8.28+commit.7893614a"
+  },
+  "contracts": {
+    "contracts/ConfidentialBatchAuction.sol:ConfidentialBatchAuction": {
+      "_initMarket": {
+        "txHcu": 64,
+        "confidence": "HIGH"
+      },
+      "placeBet": {
+        "txHcu": 813130,
+        "confidence": "LOW"
+      },
+      "requestPoolReveal": {
+        "txHcu": 0,
+        "confidence": "HIGH"
+      },
+      "onPoolRevealed": {
+        "txHcu": 0,
+        "confidence": "HIGH"
+      },
+      "claim": {
+        "txHcu": 1080032,
+        "confidence": "LOW"
+      },
+      "sweepFees": {
+        "txHcu": 32,
+        "confidence": "LOW"
+      }
+    },
+    "contracts/mocks/MockConfidentialUSDC.sol:MockConfidentialUSDC": {
+      "confidentialTransferFrom": {
+        "txHcu": 0,
+        "confidence": "HIGH"
+      },
+      "confidentialTransfer": {
+        "txHcu": 0,
+        "confidence": "HIGH"
+      },
+      "revealLastReceived": {
+        "txHcu": 0,
+        "confidence": "HIGH"
+      }
+    }
+  }
+}

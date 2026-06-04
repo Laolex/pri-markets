@@ -17,7 +17,7 @@ export function useClaimToken(marketId: number) {
       const hash = await writeContractAsync({
         address: CONTRACT_ADDRESS,
         abi: CONTRACT_ABI,
-        functionName: "claimToken",
+        functionName: "claim",
         args: [BigInt(marketId)],
       });
       setTxStatus(`Token settlement complete: ${hash.slice(0, 10)}…`);
