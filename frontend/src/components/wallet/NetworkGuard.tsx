@@ -13,7 +13,7 @@ export function NetworkGuard({ children }: { children: ReactNode }) {
       <div className="fixed inset-0 bg-void/95 backdrop-blur-sm flex items-center justify-center z-50">
         <div className="bg-surface border border-gold-border notched-lg p-8 max-w-sm w-full mx-4">
           <div className="font-mono text-[10px] tracking-widest2 text-gold-dim mb-6">
-            NETWORK ERROR / CBC-E001
+            NETWORK ERROR / PRI-E001
           </div>
           <div className="font-display text-3xl text-gold mb-3">WRONG NETWORK</div>
           <p className="font-body text-ink-secondary text-[14px] leading-relaxed">

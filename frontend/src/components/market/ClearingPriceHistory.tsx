@@ -42,7 +42,7 @@ function EpochRow({ market, index }: { market: MarketView; index: number }) {
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
               <span className="font-mono text-[10px] text-ink-dim flex-shrink-0">
-                CBC-{String(market.id + 1).padStart(3, "0")}
+                PRI-{String(market.id + 1).padStart(3, "0")}
               </span>
               <span className="font-body text-[12px] text-ink-secondary group-hover:text-ink-primary transition-colors truncate">
                 {market.question}

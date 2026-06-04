@@ -363,7 +363,7 @@ export function MarketDetail() {
             <div className="flex items-center justify-between px-5 py-3 border-b border-wire">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="font-mono text-[10px] text-ink-dim">
-                  CBC-{String(market.id + 1).padStart(3, "0")}
+                  PRI-{String(market.id + 1).padStart(3, "0")}
                 </span>
                 <span className="text-wire">·</span>
                 <span className="addr-display">{shortAddr(market.creator)}</span>
