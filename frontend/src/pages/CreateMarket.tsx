@@ -98,7 +98,7 @@ export function CreateMarket() {
     >
       <div>
         <div className="font-mono text-[10px] tracking-widest2 text-ink-dim mb-2">
-          CBC / NEW EPOCH
+          PRI / NEW EPOCH
         </div>
         <h2 className="font-display text-3xl tracking-widest text-ink-primary">INITIALIZE EPOCH</h2>
         <p className="font-body text-[13px] text-ink-secondary mt-2">

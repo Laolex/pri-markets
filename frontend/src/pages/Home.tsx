@@ -102,7 +102,7 @@ function Hero() {
       >
         <div className="h-px flex-1 bg-gradient-to-r from-transparent to-wire" />
         <span className="font-mono text-[9px] tracking-widest2 text-ink-dim">
-          CBC / SEALED-BID / FHEVM / SEPOLIA
+          PRI / SEALED-BID / FHEVM / SEPOLIA
         </span>
         <div className="h-px flex-1 bg-gradient-to-l from-transparent to-wire" />
       </motion.div>

@@ -65,11 +65,11 @@ export function Layout() {
                 className="font-display text-[26px] text-gold leading-none tracking-widest transition-all duration-300 group-hover:text-gold-bright"
                 style={{ textShadow: "0 0 20px rgba(196,153,59,0.3)" }}
               >
-                CBC
+                PRI
               </span>
             </div>
             <span className="font-mono text-[9px] text-ink-dim tracking-widest hidden sm:block leading-none">
-              CONFIDENTIAL<br />BATCH CLEARING
+              PREDICTION<br />MARKETS
             </span>
           </Link>
 
@@ -136,7 +136,7 @@ export function Layout() {
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
           <div>
             <div className="font-display text-2xl text-gold-dim tracking-widest mb-2">
-              CBC PROTOCOL
+              PRI-MARKETS PROTOCOL
             </div>
             <p className="font-body text-[12px] text-ink-dim max-w-sm leading-relaxed">
               No directional information observable during accumulation. Settlement via FHE.select —
