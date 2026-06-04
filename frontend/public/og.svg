@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-label="Pri-Markets — sealed prediction markets on fhEVM">
+  <defs>
+    <radialGradient id="glow" cx="78%" cy="28%" r="60%">
+      <stop offset="0%" stop-color="#C4993B" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#050911" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#050911"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <!-- mark -->
+  <g transform="translate(96 96)">
+    <rect width="120" height="120" rx="26" fill="#0B1120" stroke="#C4993B" stroke-opacity="0.4" stroke-width="2.5"/>
+    <path d="M37 55 L60 26 L83 55 Z" fill="#DDB84A"/>
+    <path d="M37 64 L83 64 L60 93 Z" fill="#C4993B" fill-opacity="0.5"/>
+    <rect x="26" y="58" width="68" height="3.5" rx="1.75" fill="#C4993B"/>
+  </g>
+  <text x="240" y="178" font-family="'Bebas Neue','Arial Narrow',Impact,sans-serif" font-size="96" letter-spacing="4" fill="#F4F1EA">PRI-MARKETS</text>
+  <text x="98" y="330" font-family="'Outfit',Helvetica,Arial,sans-serif" font-weight="600" font-size="52" fill="#DDB84A">Sealed prediction markets on fhEVM</text>
+  <text x="98" y="404" font-family="'Outfit',Helvetica,Arial,sans-serif" font-weight="300" font-size="34" fill="#8FA0B3">No front-running. No directional leak.</text>
+  <text x="98" y="452" font-family="'Outfit',Helvetica,Arial,sans-serif" font-weight="300" font-size="34" fill="#8FA0B3">One aggregate clearing price at epoch close.</text>
+  <text x="98" y="566" font-family="'JetBrains Mono',monospace" font-size="26" letter-spacing="2" fill="#C4993B" fill-opacity="0.85">pri-markets.vercel.app</text>
+</svg>
