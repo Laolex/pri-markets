@@ -133,7 +133,7 @@ async function main() {
   console.log(`\nMarkets after seed: ${after} (+${after - before})`);
   console.log("\nEpoch durations:");
   console.log("  14-day epochs close:", new Date(Date.now() + WEEK * 2 * 1000).toUTCString());
-  console.log("\nFrontend: https://confidential-batch-auction.vercel.app");
+  console.log("\nFrontend: https://pri-markets.vercel.app");
   console.log("Contract: https://sepolia.etherscan.io/address/" + CONTRACT_ADDRESS);
   console.log("\nDone. Judges will see ACCUMULATING epochs for the full judging window.");
 }

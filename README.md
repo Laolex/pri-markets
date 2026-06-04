@@ -1,4 +1,4 @@
-# Confidential Batch Clearing
+# Pri-Markets
 
 **Sealed-bid directional discovery for information markets — built on fhEVM**
 
@@ -6,7 +6,7 @@
 
 ## Live Demo
 
-**Frontend**: https://confidential-batch-auction.vercel.app  
+**Frontend**: https://pri-markets.vercel.app  
 **Contract (V1)**: [`0x1Fe1Dc91396ECBEF7e2B59643A94D2C9277b9fd6`](https://sepolia.etherscan.io/address/0x1Fe1Dc91396ECBEF7e2B59643A94D2C9277b9fd6) on Sepolia
 
 > **V2 (this branch)** is token-only with bet top-ups; the live deployment + frontend above are V1
@@ -16,7 +16,7 @@
 
 Continuous prediction markets leak directional flow continuously. Every bid shifts visible odds, creating reflexive momentum, copy-trading, and consensus formation loops that corrupt price discovery.
 
-Confidential Batch Clearing is a market microstructure primitive that fixes this:
+Pri-Markets is a confidential market microstructure primitive that fixes this:
 
 - Bids accumulate during a fixed epoch with **encrypted YES/NO sides and encrypted amounts**
 - No directional information is visible during accumulation
@@ -133,7 +133,7 @@ npx hardhat test test/ConfidentialBatchAuction.token.test.ts
 
 # HCU cost profile (the table above) — from the fhe-gas-profiler repo:
 node scripts/profile-external.mjs \
-  ../confidential-batch-auction/artifacts/build-info/<hash>.json \
+  ../pri-markets/artifacts/build-info/<hash>.json \
   contracts/ConfidentialBatchAuction.sol ConfidentialBatchAuction --markdown
 
 # Deploy to Sepolia (set PRIVATE_KEY, SEPOLIA_RPC_URL via hardhat vars)
@@ -147,7 +147,7 @@ cd frontend && npm install && npm run dev
 
 ## Demo Freshness
 
-The live demo at `confidential-batch-auction.vercel.app` is seeded with 14-day oracle
+The live demo at `pri-markets.vercel.app` is seeded with 14-day oracle
 epochs covering ETH/USD, BTC/USD, and LINK/USD at varying strike prices. These stay
 in ACCUMULATING state for two weeks — judges can connect a Sepolia wallet and place
 sealed bids at any point in the judging window.

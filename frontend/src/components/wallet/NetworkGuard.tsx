@@ -18,7 +18,7 @@ export function NetworkGuard({ children }: { children: ReactNode }) {
           <div className="font-display text-3xl text-gold mb-3">WRONG NETWORK</div>
           <p className="font-body text-ink-secondary text-[14px] leading-relaxed">
             Switch to <span className="font-mono text-ink-primary">Sepolia Testnet</span> to access
-            the confidential batch clearing protocol.
+            the Pri-Markets protocol.
           </p>
           <div className="mt-6 pt-4 border-t border-wire">
             <div className="font-mono text-[10px] text-ink-dim">CHAIN ID REQUIRED: 11155111</div>
