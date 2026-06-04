@@ -25,6 +25,6 @@ async function main() {
   const r = await tx.wait();
   console.log(`Created market id=${before}  gas=${r.gasUsed}  tx=${tx.hash}`);
   console.log(`Epoch closes: ${new Date(Date.now() + EPOCH * 1000).toUTCString()}`);
-  console.log(`Bet here: https://confidential-batch-auction.vercel.app/market/${before}`);
+  console.log(`Bet here: https://pri-markets.vercel.app/market/${before}`);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

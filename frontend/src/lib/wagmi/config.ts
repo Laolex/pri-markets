@@ -27,7 +27,7 @@ const wallets = [
 
 const connectors = connectorsForWallets(
   [{ groupName: "Connect a wallet", wallets }],
-  { appName: "Confidential Batch Clearing", projectId: wcProjectId ?? "" },
+  { appName: "Pri-Markets", projectId: wcProjectId ?? "" },
 );
 
 export const wagmiConfig = createConfig({
