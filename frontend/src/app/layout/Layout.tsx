@@ -31,8 +31,9 @@ function FheStatus() {
 }
 
 const NAV_LINKS = [
-  { to: "/",       label: "MARKETS" },
-  { to: "/create", label: "NEW EPOCH" },
+  { to: "/",          label: "MARKETS" },
+  { to: "/dashboard", label: "DASHBOARD" },
+  { to: "/create",    label: "NEW EPOCH" },
 ];
 
 export function Layout() {
