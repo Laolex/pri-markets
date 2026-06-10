@@ -5,7 +5,7 @@
  */
 import { ethers } from "hardhat";
 
-const AUCTION = "0xF00573FbBE32264ac14442BDC39512845D0d41C1";
+const AUCTION = "0xc9E6798c8f25E288e6d578B180AD0F5Fe7Dea935";
 const USDC    = "0x9b5Cd13b8eFbB58Dc25A05CF411D8056058aDFfF";
 const CUSDC   = "0x7c5BF43B851c1dff1a4feE8dB225b87f2C223639";
 const AMT     = 10_000_000n; // 10 USDC (6 decimals)
