@@ -46,6 +46,15 @@ end-to-end: a bet is `createEncryptedInput().add8(side).add64(amount)`, pools ac
 coprocessor, and payout is computed with `FHE.mul`/`FHE.div` and moved via `confidentialTransfer` —
 **never** touching plaintext storage or events. Nothing leaks, even after settlement.
 
+```ts
+// frontend/src/lib/fhe/encrypt.ts — one input proof covers BOTH side and amount
+const buf = fhevmInst.createEncryptedInput(contractAddress, userAddress);
+buf.add8(BigInt(side));   // 0 = NO, 1 = YES   (encrypted)
+buf.add64(amountRaw);     // cUSDC amount      (encrypted)
+const enc = await buf.encrypt();
+// → enc.handles[0] = side, enc.handles[1] = amount, enc.inputProof (shared)
+```
+
 ### Protocol fee & treasury
 
 At pool reveal the contract skims a **protocol fee** (default **2%** / 200 bps, owner-adjustable up to a
@@ -195,6 +204,16 @@ build-info with `node scripts/profile-external.mjs <build-info> contracts/Confid
 Because amount and side are both encrypted end-to-end (cUSDC / ERC-7984) and payout moves via
 `confidentialTransfer`, **nothing leaks even after settlement** — there is no retroactive directional
 inference. The reflexivity problem — which occurs *during accumulation* — is fully solved.
+
+```solidity
+// contracts/ConfidentialBatchAuction.sol — payout computed in the coprocessor; the side is never read
+euint64 winStake = m.outcome == SIDE_YES ? pos.yesStake : pos.noStake; // 0 for losing-only bettors
+euint64 encPayout = winPool > 0
+    ? FHE.div(FHE.mul(winStake, uint64(m.distributable)), uint64(winPool))  // share of after-fee pool
+    : FHE.asEuint64(0);
+FHE.allow(encPayout, msg.sender);                       // only the claimer can decrypt their amount
+IConfidentialUSDC(m.token).confidentialTransfer(msg.sender, encPayout);
+```
 
 ## V2 design (token-only, fee + treasury)
 
