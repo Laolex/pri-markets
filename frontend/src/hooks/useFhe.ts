@@ -1,21 +1,36 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { initFheInstance } from "@/lib/fhe/encrypt";
 import { useAppStore } from "@/store/appStore";
+import { getErrMsg } from "@/lib/errors";
 
 export function useFhe() {
   const { address, isConnected } = useAccount();
   const { fhevmInst, fheStatus, fheError, setFhevmInst, setFheStatus, setFheError } =
     useAppStore();
 
-  useEffect(() => {
-    if (!isConnected || !address || fhevmInst || fheStatus === "initializing") return;
-
+  const init = useCallback(() => {
     setFheStatus("initializing");
-    initFheInstance(address)
+    initFheInstance()
       .then((inst) => setFhevmInst(inst))
-      .catch((err) => setFheError(String(err?.message ?? err)));
+      .catch((err) => setFheError(getErrMsg(err)));
+  }, [setFhevmInst, setFheStatus, setFheError]);
+
+  useEffect(() => {
+    // Auto-init once a wallet is connected. Skip if an instance already exists or one is
+    // in flight. An "error" status does NOT auto-retry (that could hammer a down relayer) —
+    // the consumer drives recovery via the returned `retry()`.
+    if (!isConnected || !address || fhevmInst || fheStatus === "initializing" || fheStatus === "error") return;
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected, address]);
 
-  return { fhevmInst, fheStatus, fheError, isReady: fheStatus === "ready" };
+  // Manual recovery after a failed/aborted init (e.g. relayer was briefly down).
+  const retry = useCallback(() => {
+    if (fheStatus === "initializing") return;
+    setFheError(null);
+    init();
+  }, [fheStatus, init, setFheError]);
+
+  return { fhevmInst, fheStatus, fheError, isReady: fheStatus === "ready", retry };
 }
