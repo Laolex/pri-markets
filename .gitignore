@@ -10,3 +10,5 @@ frontend/dist/
 frontend/.vercel/
 *.log
 .DS_Store
+.vercel
+.env*
