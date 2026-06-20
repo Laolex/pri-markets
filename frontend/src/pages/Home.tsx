@@ -250,7 +250,7 @@ export function Home() {
             </div>
           </div>
           <div className="font-mono text-[10px] text-ink-dim flex-shrink-0">
-            MIN BET · 0.001 ETH
+            MIN BET · 0.01 USDC
           </div>
         </motion.div>
       )}

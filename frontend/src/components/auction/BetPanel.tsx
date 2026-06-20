@@ -55,13 +55,15 @@ export function BetPanel({ marketId, onSuccess }: BetPanelProps) {
   const { isConnected, address } = useAccount();
   const { fheStatus } = useAppStore();
   const { placeBetToken, isPending, error } = usePlaceBetToken();
-  const { mintUsdc, refreshBalance, balance, isPending: minting, faucetAmount } = useMintUsdc();
+  const { mintUsdc, refreshBalance, balance, isPending: minting, error: mintError, faucetAmount } = useMintUsdc();
   const { data: position } = usePosition(marketId, address);
   const [side, setSide]     = useState<number>(SIDE_YES);
   const [amount, setAmount] = useState("1");
   const fheReady = fheStatus === "ready";
   const hasPosition = !!position?.exists;
-  const lowBalance = balance !== null && Number(balance) < Number(amount || "0");
+  const amountNum = Number(amount || "0");
+  const lowBalance = balance !== null && amountNum > Number(balance);
+  const invalidAmount = !(amountNum > 0);
 
   useEffect(() => {
     if (isConnected && address) void refreshBalance();
@@ -77,12 +79,17 @@ export function BetPanel({ marketId, onSuccess }: BetPanelProps) {
   }
 
   async function handleSubmit() {
-    await placeBetToken(
-      marketId, side, amount,
-      USDC_TOKEN  as `0x${string}`,
-      CUSDC_TOKEN as `0x${string}`
-    );
-    onSuccess?.();
+    try {
+      await placeBetToken(
+        marketId, side, amount,
+        USDC_TOKEN  as `0x${string}`,
+        CUSDC_TOKEN as `0x${string}`
+      );
+      onSuccess?.();
+    } catch {
+      // placeBetToken already captured the message into `error` for display;
+      // swallow the rethrow so it doesn't surface as an unhandled rejection.
+    }
   }
 
   return (
@@ -137,22 +144,27 @@ export function BetPanel({ marketId, onSuccess }: BetPanelProps) {
             </span>
           </span>
           <button
-            onClick={() => void mintUsdc()}
+            onClick={() => { void mintUsdc().catch(() => {}); }}
             disabled={minting || isPending}
             className="font-mono text-[10px] tracking-widest text-teal border border-teal/40 px-2.5 py-1 hover:bg-teal/10 transition-colors disabled:opacity-50"
           >
             {minting ? "MINTING…" : `+ MINT ${Number(faucetAmount).toLocaleString()} USDC`}
           </button>
         </div>
+        {mintError && <p className="font-mono text-[10px] text-crimson mt-1">{mintError}</p>}
       </div>
 
       <button
         onClick={handleSubmit}
-        disabled={isPending || !fheReady}
+        disabled={isPending || !fheReady || invalidAmount || lowBalance}
         className="btn-gold w-full flex items-center justify-center gap-3"
       >
         {isPending ? (
           <><Spinner size={14} /><span>APPROVING + WRAPPING + SEALING</span></>
+        ) : lowBalance ? (
+          <span>INSUFFICIENT USDC — MINT MORE ABOVE</span>
+        ) : invalidAmount ? (
+          <span>ENTER AN AMOUNT</span>
         ) : (
           <><span className="text-[15px]">⬡</span><span>{hasPosition ? "ADD TO SEALED POSITION" : "SEAL & SUBMIT cUSDC BID"}</span></>
         )}

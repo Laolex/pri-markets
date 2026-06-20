@@ -1,10 +1,11 @@
 import { motion } from "framer-motion";
-import { formatEther } from "viem";
+import { formatUnits } from "viem";
 import type { MarketView } from "@/types";
-import { SIDE_YES, UNRESOLVED } from "@/types";
+import { SIDE_YES, UNRESOLVED, USDC_DECIMALS } from "@/types";
 
-function fmtEth(wei: bigint) {
-  return Number(formatEther(wei)).toFixed(4);
+// V2 is token-only: revealed pools are cUSDC (6 decimals), NOT ETH.
+function fmtUsdc(raw: bigint) {
+  return Number(formatUnits(raw, USDC_DECIMALS)).toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 export function SettlementPanel({ market }: { market: MarketView }) {
@@ -79,9 +80,9 @@ export function SettlementPanel({ market }: { market: MarketView }) {
             <div className="data-label mb-1">YES POOL</div>
             <div className="flex items-baseline gap-1.5">
               <span className="font-display text-[20px] leading-none text-teal">
-                {fmtEth(market.revealedYesPool)}
+                {fmtUsdc(market.revealedYesPool)}
               </span>
-              <span className="font-mono text-[10px] text-ink-dim">ETH</span>
+              <span className="font-mono text-[10px] text-ink-dim">USDC</span>
               <span className="font-mono text-[11px] text-teal/60">({yesPct.toFixed(1)}%)</span>
             </div>
           </div>
@@ -89,9 +90,9 @@ export function SettlementPanel({ market }: { market: MarketView }) {
             <div className="data-label mb-1">NO POOL</div>
             <div className="flex items-baseline gap-1.5 justify-end">
               <span className="font-mono text-[11px] text-crimson/60">({noPct.toFixed(1)}%)</span>
-              <span className="font-mono text-[10px] text-ink-dim">ETH</span>
+              <span className="font-mono text-[10px] text-ink-dim">USDC</span>
               <span className="font-display text-[20px] leading-none text-crimson">
-                {fmtEth(market.revealedNoPool)}
+                {fmtUsdc(market.revealedNoPool)}
               </span>
             </div>
           </div>
