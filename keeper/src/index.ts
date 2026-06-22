@@ -7,9 +7,10 @@ import { refreshDemoMarkets } from "./refresh.js";
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const POLL_MS          = 30_000;        // 30 s between sweeps
-const REFRESH_INTERVAL = 6 * 60 * 60;  // 6 hours in seconds — how often to check demo slots
+const REFRESH_INTERVAL = 2 * 60 * 60;  // 2 hours in seconds — how often to check demo slots (< 4h shortest market so slots never sit empty)
 const BLOCK_RANGE      = 10;            // Alchemy free tier max blocks per eth_getLogs request
-const DEPLOY_BLOCK     = 10_981_135;    // V2 (fee+treasury) deployment block — oracle backfill start
+const MAX_CHUNKS_PER_POLL = 50;        // ≤ 500 blocks drained per poll — bounds a single sweep while clearing backlogs fast
+const DEPLOY_BLOCK     = 11_031_063;    // V2 (overflow-safe claim) deployment block — oracle backfill start
 const FALLBACK_RPC     = "https://ethereum-sepolia-rpc.publicnode.com";
 
 function requireEnv(key: string): string {
@@ -102,9 +103,17 @@ async function handlePoolReveal(contract: ethers.Contract, ev: ethers.EventLog) 
   const marketId: bigint = ev.args.marketId;
   const handles: string[] = Array.from(ev.args.handles as string[]);
 
-  const m = await contract.getMarket(marketId);
+  let m = await contract.getMarket(marketId);
   if (m.poolRevealed) {
     log(`market ${marketId}: pool already revealed, skipping`);
+    await sweepFeesIfPending(contract, marketId);
+    return;
+  }
+  if (!m.poolRevealRequested) {
+    // Stale/duplicate event (e.g. re-seen while draining a block backlog) for a market
+    // whose reveal was never requested or was already cleared — onPoolRevealed would
+    // revert "No pending reveal". Skip instead of burning gas.
+    log(`market ${marketId}: no pending reveal request, skipping`);
     return;
   }
 
@@ -113,6 +122,17 @@ async function handlePoolReveal(contract: ethers.Contract, ev: ethers.EventLog) 
     () => publicDecrypt(handles),
     `publicDecrypt pools market=${marketId}`,
   );
+
+  // Re-check after the (~10s) decryption: another tx or a duplicate event may have
+  // revealed this market while publicDecrypt was in flight. Submitting onPoolRevealed
+  // now would revert "Already revealed" (the 44990-gas wasted-tx we were seeing), so
+  // re-read state and bail to the fee sweep instead.
+  m = await contract.getMarket(marketId);
+  if (m.poolRevealed) {
+    log(`market ${marketId}: pool revealed concurrently during decryption, skipping submit`);
+    await sweepFeesIfPending(contract, marketId);
+    return;
+  }
 
   const tx = await withRetry(
     () => contract.onPoolRevealed(marketId, handles, abiEncodedClearValues, decryptionProof),
@@ -242,12 +262,19 @@ async function main() {
   while (true) {
     try {
       const current = await provider.getBlockNumber();
-      if (current > lastBlock) {
+      // Drain the backlog in multiple BLOCK_RANGE-sized chunks per poll so a
+      // restart/downtime gap is cleared in minutes instead of crawling 10
+      // blocks/30s. Each eth_getLogs stays within the Alchemy free-tier 10-block
+      // limit; chunks-per-poll is capped so a single poll stays bounded, and a
+      // small inter-chunk sleep mirrors the backfill pacing to avoid rate limits.
+      let chunks = 0;
+      while (current > lastBlock && chunks++ < MAX_CHUNKS_PER_POLL) {
         const from = lastBlock + 1;
         const to   = Math.min(from + BLOCK_RANGE - 1, current);
         await processRange(contract, from, to, oracleMarketIds);
         lastBlock = to;
         saveState({ lastBlock, oracleMarketIds: [...oracleMarketIds] });
+        if (current > lastBlock) await sleep(60);
       }
       await settleEligibleOracleMarkets(contract, [...oracleMarketIds]);
 

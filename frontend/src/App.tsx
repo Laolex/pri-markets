@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/Spinner";
 const Home = lazy(() => import("@/pages/Home").then((m) => ({ default: m.Home })));
 const MarketDetail = lazy(() => import("@/pages/MarketDetail").then((m) => ({ default: m.MarketDetail })));
 const CreateMarket = lazy(() => import("@/pages/CreateMarket").then((m) => ({ default: m.CreateMarket })));
+const Dashboard = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 
 function RouteFallback() {
   return (
@@ -44,6 +45,14 @@ export default function App() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <CreateMarket />
+              </Suspense>
+            }
+          />
+          <Route
+            path="dashboard"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <Dashboard />
               </Suspense>
             }
           />

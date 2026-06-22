@@ -15,6 +15,10 @@ const FOUR_HOURS = 60 * 60 * 4;
 const DAY        = 60 * 60 * 24;
 const WEEK       = 60 * 60 * 24 * 7;
 
+// Market-creation resilience against the Zama per-block HCU budget (see loop below).
+const CREATE_ATTEMPTS   = 4;       // retries per slot; ~50% per-attempt revert → ~94% eventual
+const CREATE_SPACING_MS = 16_000;  // >1 Sepolia block (~12s) so each tx gets its own block
+
 // Chainlink feeds on Sepolia (8 decimal USD)
 const FEEDS = {
   ETH:  "0x694AA1769357215DE4FAC081bf1f309aDC325306",
@@ -123,23 +127,37 @@ export async function refreshDemoMarkets(
     if (activeSlots.get(key)) continue;
 
     log(`[refresh] slot ${key} has no active market — creating replacement…`);
-    try {
-      const tx = await contract.createMarketWithOracle(
-        slot.question,
-        BigInt(slot.duration),
-        slot.feed,
-        slot.strike,
-      );
-      const receipt = await tx.wait();
-      log(`[refresh] created market gas=${receipt.gasUsed} slot=${key} ✓`);
-      created++;
 
-      // Wait >1 full Sepolia block (~12s) between creations. Each market init calls
-      // FHE.asEuint64 twice; back-to-back creations exhaust the per-block FHE handle
-      // budget on the Zama co-processor, causing silent reverts on the 4th–5th market.
-      await new Promise((r) => setTimeout(r, 15_000));
-    } catch (e) {
-      log(`[refresh] failed to create market for slot ${key}: ${(e as Error).message}`);
+    // Each createMarket init runs FHE.asEuint64 ×2 on the Zama co-processor, which
+    // enforces a per-block homomorphic-compute (HCU) budget. When a creation shares
+    // a Sepolia block with another FHE-heavy tx (another creation, or this keeper's
+    // own pool-reveal/resolve), the FHE call reverts with no reason (deterministic
+    // ~326k gas). The revert is transient and block-local — retrying in a later
+    // block clears it ~94% of the time instead of leaving the slot empty for 6h.
+    for (let attempt = 1; attempt <= CREATE_ATTEMPTS; attempt++) {
+      try {
+        const tx = await contract.createMarketWithOracle(
+          slot.question,
+          BigInt(slot.duration),
+          slot.feed,
+          slot.strike,
+        );
+        const receipt = await tx.wait();
+        log(`[refresh] created market gas=${receipt.gasUsed} slot=${key} ✓`);
+        created++;
+        await new Promise((r) => setTimeout(r, CREATE_SPACING_MS));
+        break;
+      } catch (e) {
+        const reason = (e as Error).message.split("(")[0].trim();
+        const last = attempt === CREATE_ATTEMPTS;
+        log(
+          `[refresh] create attempt ${attempt}/${CREATE_ATTEMPTS} for slot ${key} reverted` +
+            `${last ? " — giving up until next cycle" : ", retrying next block"}: ${reason}`,
+        );
+        // Always wait >1 Sepolia block before the next attempt/creation so each tx
+        // lands in its own block and out of the previous block's HCU budget.
+        await new Promise((r) => setTimeout(r, CREATE_SPACING_MS));
+      }
     }
   }
 

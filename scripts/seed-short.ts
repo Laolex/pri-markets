@@ -4,7 +4,7 @@
  */
 import { ethers } from "hardhat";
 
-const AUCTION = process.env.CONTRACT_ADDRESS ?? "0xF00573FbBE32264ac14442BDC39512845D0d41C1";
+const AUCTION = process.env.CONTRACT_ADDRESS ?? "0xc9E6798c8f25E288e6d578B180AD0F5Fe7Dea935";
 const ETH_FEED = "0x694AA1769357215DE4FAC081bf1f309aDC325306"; // ETH/USD Sepolia
 const EPOCH = 90 * 60; // 90 min
 const STRIKE = BigInt(Math.round(1500 * 1e8)); // $1,500 — below live ETH (~$1,857), so YES wins

@@ -63,6 +63,23 @@ export async function encryptSide(
   };
 }
 
+/// Encrypts a single uint64 amount (e.g. for the unwrap burn input).
+/// Returns handles[0]=amount and its inputProof.
+export async function encryptAmount(
+  fhevmInst: FhevmInstance,
+  contractAddress: string,
+  userAddress: string,
+  amountRaw: bigint
+): Promise<{ encAmount: `0x${string}`; inputProof: `0x${string}` }> {
+  const buf = fhevmInst.createEncryptedInput(contractAddress, userAddress);
+  buf.add64(amountRaw);
+  const enc = await buf.encrypt();
+  return {
+    encAmount:  toHex(enc.handles[0]),
+    inputProof: toHex(enc.inputProof),
+  };
+}
+
 /// Encrypts both side (uint8) and amount (uint64) in one proof batch.
 /// Returns handles[0]=side, handles[1]=amount, shared inputProof.
 export async function encryptSideAndAmount(

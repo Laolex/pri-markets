@@ -348,6 +348,32 @@ describe("ConfidentialBatchAuction V2 — token-only, sub-pools, top-ups", funct
     expect((await harness.getPosition(marketId, bob.address)).claimed).to.be.true;
   });
 
+  // ── 14. claim — large pools route through the Q13 ratio path ──────────────
+  it("claim: large pools (winPool·distributable > 2^64) still pay out correctly", async function () {
+    const { harness, mockToken } = await deployHarness();
+    const marketId = await createMarket(harness, 60);
+
+    // 5,000 USDC per side → winPool·distributable = 5e9·1e10 raw² > 2^64, which
+    // wrapped the old single-mul payout. The Q13 ratio fallback keeps it exact here.
+    const USDC = 1_000_000n;
+    await mockToken.depositFor(alice.address, 3_000n * USDC);
+    await mockToken.depositFor(carol.address, 2_000n * USDC);
+    await mockToken.depositFor(bob.address,   5_000n * USDC);
+
+    await placeBetFor(alice, harness, marketId, SIDE_YES, 3_000n * USDC);
+    await placeBetFor(carol, harness, marketId, SIDE_YES, 2_000n * USDC);
+    await placeBetFor(bob,   harness, marketId, SIDE_NO,  5_000n * USDC);
+
+    await closeEpoch();
+    await harness.connect(owner).resolveMarket(marketId, SIDE_YES);
+    await doPoolReveal(harness, marketId);
+
+    // YES wins: alice 3000·(10000/5000) = 6000, carol 2000·2 = 4000, bob 0
+    expect(await doClaim(harness, mockToken, marketId, alice)).to.equal(6_000n * USDC);
+    expect(await doClaim(harness, mockToken, marketId, carol)).to.equal(4_000n * USDC);
+    expect(await doClaim(harness, mockToken, marketId, bob)).to.equal(0n);
+  });
+
   // ──────────────────────────────────────────────────────────────────────────
   // Protocol fee + treasury sweep + payout visibility
   // ──────────────────────────────────────────────────────────────────────────

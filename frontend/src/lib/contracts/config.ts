@@ -1,9 +1,9 @@
 import ABI_JSON from "./abi.json";
 import type { Abi } from "viem";
 
-// ConfidentialBatchAuction V2 (token-only, fee+treasury) — Sepolia, deployed 2026-06-03
+// ConfidentialBatchAuction V2 (token-only, fee+treasury, overflow-safe claim) — Sepolia, redeployed 2026-06-10
 export const CONTRACT_ADDRESS =
-  "0xF00573FbBE32264ac14442BDC39512845D0d41C1" as const;
+  "0xc9E6798c8f25E288e6d578B180AD0F5Fe7Dea935" as const;
 
 export const CONTRACT_ABI = ABI_JSON as unknown as Abi;
 

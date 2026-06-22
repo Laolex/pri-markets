@@ -24,4 +24,4 @@ export const ABI = [
 ] as const;
 
 // ConfidentialBatchAuction V2 (token-only, fee+treasury) — Sepolia, deployed 2026-06-03
-export const CONTRACT_ADDRESS = "0xF00573FbBE32264ac14442BDC39512845D0d41C1";
+export const CONTRACT_ADDRESS = "0xc9E6798c8f25E288e6d578B180AD0F5Fe7Dea935";

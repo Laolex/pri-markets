@@ -357,12 +357,23 @@ contract ConfidentialBatchAuction is ZamaEthereumConfig, ReentrancyGuard, Ownabl
         // The caller's stake on the winning side (encrypted). Losing-only bettors have 0 here.
         euint64 winStake = m.outcome == SIDE_YES ? pos.yesStake : pos.noStake;
 
-        // Winners split the after-fee pool. winPool == 0 (no winners) → payout 0; the whole pot
-        // is swept to the treasury via sweepFees instead.
-        euint64 numerator  = FHE.mul(winStake, uint64(m.distributable));
-        euint64 encPayout  = winPool > 0
-            ? FHE.div(numerator, uint64(winPool))
-            : FHE.asEuint64(0);
+        // Winners split the after-fee pool: payout = winStake · distributable / winPool.
+        // euint64 multiplication wraps silently mod 2^64, so the exact product is only safe
+        // while winPool · distributable fits in 64 bits (winStake ≤ winPool bounds the product).
+        // Larger pools route through a Q13 fixed-point ratio instead: winStake · ratioQ13 ≤
+        // distributable · 2^13, which the guard keeps under 2^64. Precision cost of that path
+        // is < winStake / 8192 (≤ 0.013% of the stake). winPool == 0 (no winners) → payout 0;
+        // the whole pot is swept to the treasury via sweepFees instead.
+        euint64 encPayout;
+        if (winPool == 0) {
+            encPayout = FHE.asEuint64(0);
+        } else if (m.distributable <= type(uint64).max / winPool) {
+            encPayout = FHE.div(FHE.mul(winStake, uint64(m.distributable)), uint64(winPool));
+        } else {
+            require(m.distributable <= type(uint64).max >> 13, "Pool overflow");
+            uint256 ratioQ13 = (m.distributable << 13) / winPool;
+            encPayout = FHE.shr(FHE.mul(winStake, uint64(ratioQ13)), 13);
+        }
 
         pos.claimed = true;
 
