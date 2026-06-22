@@ -2,7 +2,7 @@ import { useParams, Link } from "react-router-dom";
 import { useAccount, useWriteContract } from "wagmi";
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { useMarket, usePosition } from "@/hooks/useMarkets";
+import { useMarket, usePosition, parseMarket } from "@/hooks/useMarkets";
 import { useQueryClient } from "@tanstack/react-query";
 import { MarketStatusBadge } from "@/components/market/MarketStatusBadge";
 import { MarketCountdown } from "@/components/market/MarketCountdown";
@@ -12,10 +12,12 @@ import { BetPanel } from "@/components/auction/BetPanel";
 import { RevealPanel } from "@/components/auction/RevealPanel";
 import { ClaimPanel } from "@/components/auction/ClaimPanel";
 import { SettlementPanel } from "@/components/auction/SettlementPanel";
+import { KeeperAutoHint } from "@/components/ui/KeeperAutoHint";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAppStore } from "@/store/appStore";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "@/lib/contracts/config";
-import { type MarketView, SIDE_YES, SIDE_NO, UNRESOLVED, computeEpochStatus, SEPOLIA_FEEDS, fromFeedUnits } from "@/types";
+import { getErrMsg } from "@/lib/errors";
+import { type MarketView, SIDE_YES, SIDE_NO, UNRESOLVED, SEPOLIA_FEEDS, fromFeedUnits } from "@/types";
 
 function fmtUsdc(raw: bigint) {
   return (Number(raw) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 });
@@ -53,8 +55,7 @@ function OracleResolvePanel({ market, onSuccess }: { market: MarketView; onSucce
       setTxStatus(`Oracle resolved: ${hash.slice(0, 10)}…`);
       onSuccess();
     } catch (e: unknown) {
-      const msg = (e as { shortMessage?: string; message?: string })?.shortMessage
-        ?? (e as { message?: string })?.message ?? String(e);
+      const msg = getErrMsg(e);
       setError(msg);
       setTxStatus("Oracle resolve failed");
     } finally {
@@ -69,12 +70,13 @@ function OracleResolvePanel({ market, onSuccess }: { market: MarketView; onSucce
         <div>STRIKE: {fromFeedUnits(market.strikePrice, feed?.decimals ?? 8)} {feed?.unit}</div>
         <div>CONDITION: PRICE ≥ STRIKE → YES · PRICE &lt; STRIKE → NO</div>
       </div>
+      <KeeperAutoHint action="resolve via oracle" />
       <button
         onClick={resolve}
         disabled={isPending}
         className="btn-gold w-full flex items-center justify-center gap-3"
       >
-        {isPending ? <><Spinner size={14} /><span>READING ORACLE</span></> : "RESOLVE VIA ORACLE"}
+        {isPending ? <><Spinner size={14} /><span>READING ORACLE</span></> : "RESOLVE VIA ORACLE (manual)"}
       </button>
       {error && <p className="font-mono text-[11px] text-crimson">{error}</p>}
     </div>
@@ -225,7 +227,7 @@ function ActionPanel({
         <ResolvePanel market={market} isCreator={isCreator} onSuccess={onSuccess} />
 
         {/* Pool reveal */}
-        <RevealPanel market={market} isCreator={false} onSuccess={onSuccess} />
+        <RevealPanel market={market} onSuccess={onSuccess} />
 
         {/* Claim */}
         {hasPos && (
@@ -305,29 +307,7 @@ export function MarketDetail() {
     );
   }
 
-  const raw = rawMarket as readonly unknown[];
-  const market: MarketView = {
-    id: marketId,
-    creator:             raw[0] as string,
-    question:            raw[1] as string,
-    epochStart:          Number(raw[2] as bigint),
-    epochEnd:            Number(raw[3] as bigint),
-    resolved:            raw[4] as boolean,
-    outcome:             Number(raw[5] as number),
-    revealedYesPool:     raw[6] as bigint,
-    revealedNoPool:      raw[7] as bigint,
-    clearingPrice:       raw[8] as bigint,
-    poolRevealRequested: raw[9] as boolean,
-    poolRevealed:        raw[10] as boolean,
-    priceFeed:           (raw[11] as string)  ?? "0x0000000000000000000000000000000000000000",
-    strikePrice:         (raw[12] as bigint)  ?? 0n,
-    useOracle:           (raw[13] as boolean) ?? false,
-    token:               (raw[14] as string)  ?? "0x0000000000000000000000000000000000000000",
-    betCount:            (raw[15] as bigint)  ?? 0n,
-    bettorCount:         (raw[16] as bigint)  ?? 0n,
-    epochStatus:         "accumulating",
-  };
-  market.epochStatus = computeEpochStatus(market);
+  const market: MarketView = parseMarket(marketId, rawMarket as readonly unknown[]);
 
   const isCreator = address?.toLowerCase() === market.creator.toLowerCase();
 

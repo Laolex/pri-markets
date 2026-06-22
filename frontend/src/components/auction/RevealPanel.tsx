@@ -1,15 +1,15 @@
 import { useRevealPools } from "@/hooks/useReveal";
 import { Spinner } from "@/components/ui/Spinner";
+import { KeeperAutoHint } from "@/components/ui/KeeperAutoHint";
 import { useAppStore } from "@/store/appStore";
 import type { MarketView } from "@/types";
 
 interface RevealPanelProps {
   market: MarketView;
-  isCreator: boolean;
   onSuccess?: () => void;
 }
 
-export function RevealPanel({ market, isCreator, onSuccess }: RevealPanelProps) {
+export function RevealPanel({ market, onSuccess }: RevealPanelProps) {
   const { fheStatus } = useAppStore();
   const { revealPools, isPending, error } = useRevealPools(market.id);
   const fheReady = fheStatus === "ready";
@@ -25,8 +25,13 @@ export function RevealPanel({ market, isCreator, onSuccess }: RevealPanelProps) 
           Decrypt and publish YES/NO pool composition. Directional split becomes public exactly once.
         </p>
       </div>
+
+      {/* Pool reveal is permissionless and the protocol keeper runs it automatically —
+          the manual button is a fallback while the keeper catches up (or if it's offline). */}
+      <KeeperAutoHint action="reveal these pools" />
+
       <button
-        onClick={() => revealPools(market.poolRevealRequested).then(() => onSuccess?.())}
+        onClick={() => revealPools(market.poolRevealRequested).then(() => onSuccess?.()).catch(() => {})}
         disabled={isPending || !fheReady}
         className="btn-gold flex items-center gap-3"
       >
@@ -36,7 +41,7 @@ export function RevealPanel({ market, isCreator, onSuccess }: RevealPanelProps) 
             <span>DECRYPTING POOLS</span>
           </>
         ) : (
-          "DECLASSIFY AGGREGATE POOLS"
+          "DECLASSIFY AGGREGATE POOLS (manual)"
         )}
       </button>
       {error && (

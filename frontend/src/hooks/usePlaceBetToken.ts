@@ -3,6 +3,7 @@ import { parseUnits } from "viem";
 import { useWriteContract, useAccount, usePublicClient } from "wagmi";
 import { encryptSideAndAmount } from "@/lib/fhe/encrypt";
 import { useAppStore } from "@/store/appStore";
+import { getErrMsg } from "@/lib/errors";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "@/lib/contracts/config";
 import { USDC_DECIMALS } from "@/types";
 
@@ -138,9 +139,7 @@ export function usePlaceBetToken() {
       setTxStatus(`Bid sealed ✓ ${hash.slice(0, 10)}…`);
       return hash;
     } catch (e: unknown) {
-      const msg = (e as { shortMessage?: string; message?: string })?.shortMessage
-        ?? (e as { message?: string })?.message
-        ?? String(e);
+      const msg = getErrMsg(e);
       setError(msg);
       setTxStatus("Error: " + msg);
       throw e;

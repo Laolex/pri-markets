@@ -7,12 +7,13 @@ import { useFhe } from "@/hooks/useFhe";
 import { useAppStore } from "@/store/appStore";
 import { CONTRACT_ADDRESS } from "@/lib/contracts/config";
 
-function FheStatus() {
+function FheStatus({ onRetry }: { onRetry: () => void }) {
   const { fheStatus } = useAppStore();
   if (fheStatus === "idle") return null;
 
   const isReady  = fheStatus === "ready";
   const isInit   = fheStatus === "initializing";
+  const isError  = fheStatus === "error";
 
   return (
     <div className="hidden sm:flex items-center gap-1.5">
@@ -21,11 +22,22 @@ function FheStatus() {
         isInit  ? "bg-gold animate-pulse-gold" :
         "bg-crimson"
       }`} />
-      <span className={`font-mono text-[9px] tracking-widest ${
-        isReady ? "text-teal/80" : isInit ? "text-gold/70" : "text-crimson/80"
-      }`}>
-        {isReady ? "FHE READY" : isInit ? "FHE INIT" : "FHE ERR"}
-      </span>
+      {isError ? (
+        // Failed init is recoverable — make the indicator a retry button.
+        <button
+          onClick={onRetry}
+          className="font-mono text-[9px] tracking-widest text-crimson/80 hover:text-crimson underline underline-offset-2"
+          title="Retry FHE relayer initialization"
+        >
+          FHE ERR — RETRY
+        </button>
+      ) : (
+        <span className={`font-mono text-[9px] tracking-widest ${
+          isReady ? "text-teal/80" : "text-gold/70"
+        }`}>
+          {isReady ? "FHE READY" : "FHE INIT"}
+        </span>
+      )}
     </div>
   );
 }
@@ -37,7 +49,7 @@ const NAV_LINKS = [
 ];
 
 export function Layout() {
-  useFhe();
+  const { retry: retryFhe } = useFhe();
   const location = useLocation();
   const { txStatus, clearTxStatus } = useAppStore();
 
@@ -101,7 +113,7 @@ export function Layout() {
 
           {/* Right */}
           <div className="flex items-center gap-4 flex-shrink-0">
-            <FheStatus />
+            <FheStatus onRetry={retryFhe} />
             <ConnectWalletButton />
           </div>
         </div>

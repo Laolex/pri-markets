@@ -2,6 +2,7 @@ import { useState } from "react";
 import { formatUnits } from "viem";
 import { useAccount, usePublicClient, useSignTypedData } from "wagmi";
 import { useAppStore } from "@/store/appStore";
+import { getErrMsg } from "@/lib/errors";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "@/lib/contracts/config";
 import { USDC_DECIMALS } from "@/types";
 
@@ -80,9 +81,7 @@ export function useRevealPayout(marketId: number) {
       setPayout(human);
       return human;
     } catch (e: unknown) {
-      const msg = (e as { shortMessage?: string; message?: string })?.shortMessage
-        ?? (e as { message?: string })?.message
-        ?? String(e);
+      const msg = getErrMsg(e);
       setError(msg);
       throw e;
     } finally {

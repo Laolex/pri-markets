@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { useWriteContract } from "wagmi";
+import { useWriteContract, usePublicClient } from "wagmi";
 import { useAppStore } from "@/store/appStore";
 import { useEncPools } from "@/hooks/useMarkets";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "@/lib/contracts/config";
+import { getErrMsg } from "@/lib/errors";
 
 export function useRevealPools(marketId: number) {
   const { fhevmInst, setTxStatus } = useAppStore();
   const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
   const { refetch: refetchPools } = useEncPools(marketId);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,12 +21,17 @@ export function useRevealPools(marketId: number) {
     try {
       if (!alreadyRequested) {
         setTxStatus("Requesting pool reveal…");
-        await writeContractAsync({
+        const reqHash = await writeContractAsync({
           address: CONTRACT_ADDRESS,
           abi: CONTRACT_ABI,
           functionName: "requestPoolReveal",
           args: [BigInt(marketId)],
         });
+        // MUST mine before publicDecrypt: requestPoolReveal is what marks the pool
+        // handles publicly-decryptable in the on-chain ACL. If we decrypt before the tx
+        // confirms, the KMS sees no grant and the reveal races/fails.
+        setTxStatus("Confirming reveal request…");
+        if (publicClient) await publicClient.waitForTransactionReceipt({ hash: reqHash });
       }
 
       const { data: freshPools } = await refetchPools();
@@ -51,9 +58,7 @@ export function useRevealPools(marketId: number) {
       setTxStatus(`Pools revealed: ${hash.slice(0, 10)}…`);
       return hash;
     } catch (e: unknown) {
-      const msg = (e as { shortMessage?: string; message?: string })?.shortMessage
-        ?? (e as { message?: string })?.message
-        ?? String(e);
+      const msg = getErrMsg(e);
       setError(msg);
       setTxStatus("Error: " + msg);
       throw e;

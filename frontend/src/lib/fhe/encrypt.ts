@@ -1,17 +1,24 @@
-import {
-  initSDK,
-  createInstance,
-  SepoliaConfig,
-  type FhevmInstance,
-} from "@zama-fhe/relayer-sdk/web";
+// Type-only import is erased at build time — it carries no bundle weight. The actual
+// SDK (WASM + crypto, the heaviest dependency) is dynamically imported inside
+// initFheInstance so it lands in its own chunk and stays out of the initial page load.
+import type { FhevmInstance } from "@zama-fhe/relayer-sdk/web";
 import { bytesToHex } from "viem";
 
-export async function initFheInstance(
-  userAddress: string
-): Promise<FhevmInstance> {
+// Reject `p` if it doesn't settle within `ms` — so a hung relayer surfaces an error
+// instead of freezing the flow forever.
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, rej) => setTimeout(() => rej(new Error(label)), ms)),
+  ]);
+}
+
+export async function initFheInstance(): Promise<FhevmInstance> {
   const eth = (window as Window & { ethereum?: unknown }).ethereum;
   if (!eth) throw new Error("No Ethereum provider found");
 
+  // Lazy-load the SDK on first use (code-split — see note above).
+  const { initSDK, createInstance, SepoliaConfig } = await import("@zama-fhe/relayer-sdk/web");
   await initSDK();
 
   const relayerUrl =
@@ -20,16 +27,18 @@ export async function initFheInstance(
       : undefined;
 
   try {
-    const inst = (await Promise.race([
+    return await withTimeout(
       createInstance({ ...SepoliaConfig, network: eth, ...(relayerUrl ? { relayerUrl } : {}) }),
-      new Promise<never>((_, rej) =>
-        setTimeout(() => rej(new Error("FHE init timeout")), 60_000)
-      ),
-    ])) as FhevmInstance;
-    return inst;
+      60_000,
+      "FHE init timeout",
+    );
   } catch {
-    // Fallback without relayer
-    return createInstance({ ...SepoliaConfig, network: eth }) as Promise<FhevmInstance>;
+    // Fallback to the SDK's default relayer — also timeout-guarded so it can't hang.
+    return withTimeout(
+      createInstance({ ...SepoliaConfig, network: eth }),
+      60_000,
+      "FHE init timeout (fallback)",
+    );
   }
 }
 

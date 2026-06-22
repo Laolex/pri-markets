@@ -1,13 +1,18 @@
 import { useReadContract } from "wagmi";
+import { getPublicClient } from "@wagmi/core";
 import { useQuery } from "@tanstack/react-query";
-import { createPublicClient, http } from "viem";
 import { sepolia } from "wagmi/chains";
-import { CONTRACT_ADDRESS, CONTRACT_ABI, SEPOLIA_RPC } from "@/lib/contracts/config";
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from "@/lib/contracts/config";
+import { wagmiConfig } from "@/lib/wagmi/config";
 import { type MarketView, computeEpochStatus } from "@/types";
 
-const publicClient = createPublicClient({ chain: sepolia, transport: http(SEPOLIA_RPC) });
+// Single source of RPC truth: derive the read client from the wagmi config (already
+// pointed at SEPOLIA_RPC with Multicall3) instead of standing up a second viem client.
+const publicClient = getPublicClient(wagmiConfig, { chainId: sepolia.id });
 
-function parseMarket(id: number, raw: readonly unknown[]): MarketView {
+/** Decode a raw getMarket() tuple into a MarketView. Exported so MarketDetail reuses
+ *  the exact same mapping instead of duplicating (and drifting from) it. */
+export function parseMarket(id: number, raw: readonly unknown[]): MarketView {
   const [
     creator, question, epochStart, epochEnd, resolved, outcome,
     revealedYesPool, revealedNoPool, clearingPrice, poolRevealRequested, poolRevealed,
