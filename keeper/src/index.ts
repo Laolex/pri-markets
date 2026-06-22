@@ -7,7 +7,7 @@ import { refreshDemoMarkets } from "./refresh.js";
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const POLL_MS          = 30_000;        // 30 s between sweeps
-const REFRESH_INTERVAL = 6 * 60 * 60;  // 6 hours in seconds — how often to check demo slots
+const REFRESH_INTERVAL = 2 * 60 * 60;  // 2 hours in seconds — how often to check demo slots (< 4h shortest market so slots never sit empty)
 const BLOCK_RANGE      = 10;            // Alchemy free tier max blocks per eth_getLogs request
 const MAX_CHUNKS_PER_POLL = 50;        // ≤ 500 blocks drained per poll — bounds a single sweep while clearing backlogs fast
 const DEPLOY_BLOCK     = 11_031_063;    // V2 (overflow-safe claim) deployment block — oracle backfill start
