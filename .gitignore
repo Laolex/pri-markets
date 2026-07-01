@@ -12,3 +12,6 @@ frontend/.vercel/
 .DS_Store
 .vercel
 .env*
+
+# Commit the env template (must come after the .env* ignores — last match wins).
+!.env.example
