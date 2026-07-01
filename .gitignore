@@ -15,3 +15,6 @@ frontend/.vercel/
 
 # Commit the env template (must come after the .env* ignores — last match wins).
 !.env.example
+
+# Agent goal-ledger (execution memory, not product code)
+.agent/

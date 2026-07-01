@@ -48,21 +48,6 @@ const toHex = (v: unknown): `0x${string}` => {
   throw new Error(`FHE encrypt: unexpected type ${typeof v}`);
 };
 
-export async function encryptSide(
-  fhevmInst: FhevmInstance,
-  contractAddress: string,
-  userAddress: string,
-  side: number
-): Promise<{ handle: `0x${string}`; inputProof: `0x${string}` }> {
-  const buf = fhevmInst.createEncryptedInput(contractAddress, userAddress);
-  buf.add8(BigInt(side));
-  const enc = await buf.encrypt();
-  return {
-    handle:     toHex(enc.handles[0]),
-    inputProof: toHex(enc.inputProof),
-  };
-}
-
 /// Encrypts a single uint64 amount (e.g. for the unwrap burn input).
 /// Returns handles[0]=amount and its inputProof.
 export async function encryptAmount(

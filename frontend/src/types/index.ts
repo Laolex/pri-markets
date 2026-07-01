@@ -40,21 +40,9 @@ export const CUSDC_TOKEN      = "0x7c5BF43B851c1dff1a4feE8dB225b87f2C223639";
 export const USDC_TOKEN       = "0x9b5Cd13b8eFbB58Dc25A05CF411D8056058aDFfF";
 export const USDC_DECIMALS    = 6;
 
-// Zama Wrappers Registry — browse available confidential tokens
-export const WRAPPERS_REGISTRY = "0x2f0750Bbb0A246059d80e94c454586a7F27a128e";
-
-// Other Zama confidential tokens on Sepolia
-export const CUSDT_TOKEN = "0x4E7B06D78965594eB5EF5414c357ca21E1554491";
-export const CWETH_TOKEN = "0x46208622DA27d91db4f0393733C8BA082ed83158";
-
 export const SIDE_NO  = 0;
 export const SIDE_YES = 1;
 export const UNRESOLVED = 255;
-
-// V2 is token-only — every market is cUSDC. Kept for call-site compatibility.
-export function isTokenMarketView(m: MarketView): boolean {
-  return m.token !== "0x0000000000000000000000000000000000000000";
-}
 
 export function computeEpochStatus(m: MarketView): EpochStatus {
   const now = Math.floor(Date.now() / 1000);

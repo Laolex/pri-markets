@@ -118,14 +118,3 @@ export function useEncPools(marketId: number) {
     args: [BigInt(marketId)],
   });
 }
-
-/** V2: per-position encrypted YES/NO sub-pool stakes. */
-export function useEncStakes(marketId: number, address?: string) {
-  return useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: CONTRACT_ABI,
-    functionName: "getEncStakes",
-    args: [BigInt(marketId), (address ?? "0x0000000000000000000000000000000000000000") as `0x${string}`],
-    query: { enabled: !!address },
-  });
-}
